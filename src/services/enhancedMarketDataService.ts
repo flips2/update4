@@ -39,7 +39,7 @@ export interface MarketData {
 class EnhancedMarketDataService {
   private readonly CMC_API_KEY = 'f7e5f581-2dbb-43b6-81af-ba8949c0905d';
   private readonly TRADERMADE_API_KEY = 'Ex8yL2gOy1ta5Go4LPLl';
-  private readonly NEWSAPI_KEY = '17814ef36d29422cb4855df54e08bb9f';
+  private readonly NEWSDATA_API_KEY = 'pub_74114f73c55c40ecaffda960ecf87002';
   private readonly FEAR_GREED_URL = 'https://api.alternative.me/fng/';
   
   async getCryptoPrices(): Promise<{ btc: CryptoPrice; eth: CryptoPrice }> {
@@ -168,68 +168,102 @@ class EnhancedMarketDataService {
 
   async getFinancialNews(): Promise<NewsItem[]> {
     try {
-      // Using NewsAPI.org for comprehensive financial news
+      // Using NewsData.io API with the new API key and parameters
       const response = await fetch(
-        `https://newsapi.org/v2/everything?q=bitcoin+OR+ethereum+OR+gold+OR+trading+OR+cryptocurrency&sortBy=publishedAt&pageSize=10&language=en&apiKey=${this.NEWSAPI_KEY}`
+        `https://newsdata.io/api/1/latest?apikey=${this.NEWSDATA_API_KEY}&q=latest headlines&language=en&country=us&size=10`
       );
       
       if (!response.ok) {
-        throw new Error('Failed to fetch financial news');
+        throw new Error('Failed to fetch financial news from NewsData.io');
       }
       
       const data = await response.json();
       
-      return data.articles.map((article: any) => ({
-        title: article.title,
-        summary: article.description || article.title,
-        url: article.url,
-        publishedAt: article.publishedAt,
-        source: article.source.name,
-        imageUrl: article.urlToImage
-      })).filter((article: NewsItem) => 
-        article.title && 
-        article.title !== '[Removed]' && 
-        article.summary && 
-        article.summary !== '[Removed]'
-      );
+      if (data.status === 'success' && data.results) {
+        return data.results.map((article: any) => ({
+          title: article.title || 'Untitled',
+          summary: article.description || article.content || article.title || 'No summary available',
+          url: article.link || '#',
+          publishedAt: article.pubDate || new Date().toISOString(),
+          source: article.source_name || article.source_id || 'Unknown Source',
+          imageUrl: article.image_url || undefined
+        })).filter((article: NewsItem) => 
+          article.title && 
+          article.title !== '[Removed]' && 
+          article.summary && 
+          article.summary !== '[Removed]' &&
+          article.title.length > 10 // Filter out very short titles
+        );
+      } else {
+        throw new Error('Invalid response format from NewsData.io');
+      }
     } catch (error) {
       console.error('Error fetching financial news:', error);
       // Return mock data as fallback
       return [
         {
           title: "Bitcoin Reaches New Monthly High Amid Institutional Adoption",
-          summary: "Bitcoin continues its upward momentum as major institutions increase their cryptocurrency holdings, driving market confidence.",
+          summary: "Bitcoin continues its upward momentum as major institutions increase their cryptocurrency holdings, driving market confidence and pushing prices to new monthly highs.",
           url: "#",
           publishedAt: new Date().toISOString(),
-          source: "Crypto News Today"
+          source: "Crypto News Today",
+          imageUrl: "https://images.pexels.com/photos/730547/pexels-photo-730547.jpeg"
+        },
+        {
+          title: "Federal Reserve Signals Potential Interest Rate Changes",
+          summary: "The Federal Reserve hints at upcoming monetary policy adjustments as inflation data shows mixed signals across different economic sectors.",
+          url: "#",
+          publishedAt: new Date(Date.now() - 3600000).toISOString(),
+          source: "Financial Times",
+          imageUrl: "https://images.pexels.com/photos/259027/pexels-photo-259027.jpeg"
         },
         {
           title: "Gold Prices Stabilize as Safe Haven Demand Increases",
-          summary: "Gold maintains its position as a preferred safe haven asset during periods of market uncertainty and inflation concerns.",
+          summary: "Gold maintains its position as a preferred safe haven asset during periods of market uncertainty and inflation concerns, with prices showing stability.",
           url: "#",
-          publishedAt: new Date(Date.now() - 3600000).toISOString(),
-          source: "Financial Times"
+          publishedAt: new Date(Date.now() - 7200000).toISOString(),
+          source: "Market Watch",
+          imageUrl: "https://images.pexels.com/photos/163032/office-gold-trading-finance-163032.jpeg"
         },
         {
           title: "Ethereum Network Upgrade Shows Promising Results",
-          summary: "Latest Ethereum improvements focus on scalability and reduced transaction fees, attracting more developers to the platform.",
+          summary: "Latest Ethereum improvements focus on scalability and reduced transaction fees, attracting more developers to the platform and boosting ecosystem growth.",
           url: "#",
-          publishedAt: new Date(Date.now() - 7200000).toISOString(),
-          source: "Blockchain Today"
+          publishedAt: new Date(Date.now() - 10800000).toISOString(),
+          source: "Blockchain Today",
+          imageUrl: "https://images.pexels.com/photos/844124/pexels-photo-844124.jpeg"
         },
         {
           title: "Trading Volume Surges Across Major Cryptocurrency Exchanges",
-          summary: "Increased retail and institutional trading activity drives record volumes across leading crypto trading platforms.",
+          summary: "Increased retail and institutional trading activity drives record volumes across leading crypto trading platforms, indicating growing market participation.",
           url: "#",
-          publishedAt: new Date(Date.now() - 10800000).toISOString(),
-          source: "Market Watch"
+          publishedAt: new Date(Date.now() - 14400000).toISOString(),
+          source: "Crypto Weekly",
+          imageUrl: "https://images.pexels.com/photos/6801648/pexels-photo-6801648.jpeg"
         },
         {
           title: "Central Banks Consider Digital Currency Implementations",
-          summary: "Multiple central banks worldwide are accelerating their digital currency research and pilot programs.",
+          summary: "Multiple central banks worldwide are accelerating their digital currency research and pilot programs, signaling a shift towards digital monetary systems.",
           url: "#",
-          publishedAt: new Date(Date.now() - 14400000).toISOString(),
-          source: "Reuters"
+          publishedAt: new Date(Date.now() - 18000000).toISOString(),
+          source: "Reuters",
+          imageUrl: "https://images.pexels.com/photos/259200/pexels-photo-259200.jpeg"
+        },
+        {
+          title: "Stock Market Shows Resilience Despite Economic Headwinds",
+          summary: "Major stock indices demonstrate strength as investors remain optimistic about corporate earnings and economic recovery prospects.",
+          url: "#",
+          publishedAt: new Date(Date.now() - 21600000).toISOString(),
+          source: "Wall Street Journal",
+          imageUrl: "https://images.pexels.com/photos/590041/pexels-photo-590041.jpeg"
+        },
+        {
+          title: "Forex Markets React to Global Economic Data",
+          summary: "Currency pairs show volatility as traders digest latest economic indicators from major economies, with particular focus on inflation and employment data.",
+          url: "#",
+          publishedAt: new Date(Date.now() - 25200000).toISOString(),
+          source: "FX Today",
+          imageUrl: "https://images.pexels.com/photos/210607/pexels-photo-210607.jpeg"
         }
       ];
     }

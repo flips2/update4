@@ -108,6 +108,28 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
     reader.readAsDataURL(file);
   }, []);
 
+  // Helper function to convert ISO datetime to datetime-local format
+  const convertToDateTimeLocal = (isoString: string | undefined): string => {
+    if (!isoString) return '';
+    
+    try {
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) return '';
+      
+      // Convert to local timezone and format for datetime-local input
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch (error) {
+      console.error('Error converting datetime:', error);
+      return '';
+    }
+  };
+
   const extractTradeData = async () => {
     if (!preview) return;
 
@@ -122,29 +144,7 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
 
       const extractedData = await enhancedAiService.analyzeScreenshot(file);
       
-      // Helper function to convert ISO string to datetime-local format
-      const formatForDateTimeLocal = (isoString: string | undefined): string => {
-        if (!isoString) {
-          return new Date().toISOString().slice(0, 16);
-        }
-        // Convert ISO string to datetime-local format (YYYY-MM-DDTHH:mm)
-        return new Date(isoString).toISOString().slice(0, 16);
-      };
-      
-      // Populate form with extracted data including dates
-      const openTime = formatForDateTimeLocal(extractedData.openTime);
-      const closeTime = formatForDateTimeLocal(extractedData.closeTime);
-      
-      // Add debug logging to verify time conversion
-      console.log('Raw extracted times:', {
-        openTime: extractedData.openTime,
-        closeTime: extractedData.closeTime
-      });
-      console.log('Converted for form:', {
-        openTime,
-        closeTime
-      });
-      
+      // Populate form with extracted data including properly formatted dates
       setFormData(prev => ({
         ...prev,
         symbol: extractedData.symbol || '',
@@ -155,8 +155,8 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
         tp: extractedData.tp?.toString() || '',
         sl: extractedData.sl?.toString() || '',
         position: extractedData.position || 'Closed',
-        openTime: openTime,
-        closeTime: closeTime,
+        openTime: convertToDateTimeLocal(extractedData.openTime),
+        closeTime: convertToDateTimeLocal(extractedData.closeTime),
         reason: extractedData.reason || 'Other',
         pnlUsd: extractedData.pnlUsd?.toString() || '',
         leverage: extractedData.leverage?.toString() || prev.leverage,
@@ -303,6 +303,18 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
     setLoading(true);
 
     try {
+      // Helper function to convert datetime-local to ISO string
+      const convertToISOString = (dateTimeLocal: string): string | undefined => {
+        if (!dateTimeLocal) return undefined;
+        try {
+          const date = new Date(dateTimeLocal);
+          return isNaN(date.getTime()) ? undefined : date.toISOString();
+        } catch (error) {
+          console.error('Error converting datetime to ISO:', error);
+          return undefined;
+        }
+      };
+
       const trade: Omit<Trade, 'id' | 'created_at'> = {
         session_id: sessionId,
         margin: parseFloat(formData.margin),
@@ -318,8 +330,8 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
         tp: formData.tp ? parseFloat(formData.tp) : undefined,
         sl: formData.sl ? parseFloat(formData.sl) : undefined,
         position: formData.position as 'Open' | 'Closed' || undefined,
-        open_time: formData.openTime || undefined,
-        close_time: formData.closeTime || undefined,
+        open_time: convertToISOString(formData.openTime),
+        close_time: convertToISOString(formData.closeTime),
         reason: formData.reason as 'TP' | 'SL' | 'Early Close' | 'Other' || undefined,
         // Forex specific
         leverage: formData.leverage ? parseFloat(formData.leverage) : undefined,
@@ -353,6 +365,7 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
       clearUpload();
       toast.success('Forex trade added successfully');
     } catch (error) {
+      console.error('Error adding trade:', error);
       toast.error('Failed to add trade');
     } finally {
       setLoading(false);
