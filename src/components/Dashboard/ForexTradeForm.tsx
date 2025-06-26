@@ -303,7 +303,7 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
     setLoading(true);
 
     try {
-      // Helper function to convert datetime-local to ISO string
+      // Helper function to safely convert datetime-local to ISO string
       const convertToISOString = (dateTimeLocal: string): string | undefined => {
         if (!dateTimeLocal) return undefined;
         try {
@@ -337,6 +337,8 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
         leverage: formData.leverage ? parseFloat(formData.leverage) : undefined,
         contract_size: formData.contractSize ? parseFloat(formData.contractSize) : undefined,
       };
+
+      console.log('Submitting trade data:', trade); // Debug log
 
       await onAddTrade(trade);
       
