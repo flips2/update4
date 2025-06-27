@@ -108,15 +108,62 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
     reader.readAsDataURL(file);
   }, []);
 
-  // Helper function to convert ISO datetime to datetime-local format
-  const convertToDateTimeLocal = (isoString: string | undefined): string => {
-    if (!isoString) return '';
+  // Helper function to safely convert datetime strings to datetime-local format
+  const convertToDateTimeLocal = (dateTimeString: string | undefined): string => {
+    if (!dateTimeString) return '';
     
     try {
-      const date = new Date(isoString);
-      if (isNaN(date.getTime())) return '';
+      // Handle various datetime formats
+      let date: Date;
       
-      // Convert to local timezone and format for datetime-local input
+      // If it's already in ISO format
+      if (dateTimeString.includes('T') || dateTimeString.includes('Z')) {
+        date = new Date(dateTimeString);
+      } 
+      // Handle "Jun 16, 8:50:55 PM" format
+      else if (dateTimeString.includes(',') && (dateTimeString.includes('AM') || dateTimeString.includes('PM'))) {
+        // Parse the custom format
+        const monthMap: { [key: string]: string } = {
+          'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+          'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+          'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+        };
+        
+        const match = dateTimeString.match(/(\w{3})\s+(\d{1,2}),\s+(\d{1,2}):(\d{2}):(\d{2})\s+(AM|PM)/i);
+        if (match) {
+          const [, monthName, day, hour, minute, second, ampm] = match;
+          const month = monthMap[monthName];
+          
+          if (month) {
+            let hour24 = parseInt(hour);
+            if (ampm.toUpperCase() === 'PM' && hour24 !== 12) {
+              hour24 += 12;
+            } else if (ampm.toUpperCase() === 'AM' && hour24 === 12) {
+              hour24 = 0;
+            }
+            
+            const year = new Date().getFullYear();
+            const isoString = `${year}-${month}-${day.padStart(2, '0')}T${hour24.toString().padStart(2, '0')}:${minute}:${second}`;
+            date = new Date(isoString);
+          } else {
+            date = new Date(dateTimeString);
+          }
+        } else {
+          date = new Date(dateTimeString);
+        }
+      } 
+      // Try standard parsing
+      else {
+        date = new Date(dateTimeString);
+      }
+      
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid date:', dateTimeString);
+        return '';
+      }
+      
+      // Convert to datetime-local format (YYYY-MM-DDTHH:mm)
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -125,7 +172,7 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
       
       return `${year}-${month}-${day}T${hours}:${minutes}`;
     } catch (error) {
-      console.error('Error converting datetime:', error);
+      console.error('Error converting datetime:', error, 'for value:', dateTimeString);
       return '';
     }
   };
@@ -143,6 +190,8 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
       const file = new File([blob], fileName, { type: blob.type });
 
       const extractedData = await enhancedAiService.analyzeScreenshot(file);
+      
+      console.log('Raw extracted data:', extractedData);
       
       // Populate form with extracted data including properly formatted dates
       setFormData(prev => ({
@@ -164,6 +213,11 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
         entrySide: extractedData.type === 'Buy' ? 'Long' : 'Short',
         comments: `Auto-extracted from ${fileName}`
       }));
+
+      console.log('Converted times:', {
+        openTime: convertToDateTimeLocal(extractedData.openTime),
+        closeTime: convertToDateTimeLocal(extractedData.closeTime)
+      });
 
       setExtractionStatus('success');
       toast.success('Trade data extracted successfully!');
@@ -306,11 +360,21 @@ const ForexTradeForm: React.FC<ForexTradeFormProps> = ({ onAddTrade, sessionId }
       // Helper function to safely convert datetime-local to ISO string
       const convertToISOString = (dateTimeLocal: string): string | undefined => {
         if (!dateTimeLocal) return undefined;
+        
         try {
+          // datetime-local format is YYYY-MM-DDTHH:mm
+          // We need to convert it to a proper ISO string
           const date = new Date(dateTimeLocal);
-          return isNaN(date.getTime()) ? undefined : date.toISOString();
+          
+          // Check if the date is valid
+          if (isNaN(date.getTime())) {
+            console.warn('Invalid date for conversion:', dateTimeLocal);
+            return undefined;
+          }
+          
+          return date.toISOString();
         } catch (error) {
-          console.error('Error converting datetime to ISO:', error);
+          console.error('Error converting datetime to ISO:', error, 'for value:', dateTimeLocal);
           return undefined;
         }
       };
