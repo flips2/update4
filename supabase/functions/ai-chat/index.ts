@@ -42,22 +42,68 @@ interface SearchResult {
   link: string;
 }
 
-// Function to detect if a message needs real-time search
+// Enhanced function to detect if a message needs real-time search
 function needsRealTimeSearch(message: string): boolean {
-  const realTimeKeywords = [
-    'today', 'now', 'current', 'latest', 'recent', 'price', 'weather', 
-    'news', 'won', 'match', 'score', 'live', 'happening', 'update',
-    'right now', 'this moment', 'currently', 'breaking', 'just',
-    'what\'s', 'whats', 'how much', 'who won', 'what happened',
-    'bitcoin price', 'crypto price', 'stock price', 'market',
-    'temperature', 'forecast', 'rain', 'sunny', 'cloudy'
+  const lowerMessage = message.toLowerCase().trim();
+  
+  // Always search for these high-priority categories
+  const alwaysSearchKeywords = [
+    // Market & Financial
+    'price', 'market', 'trading', 'stock', 'crypto', 'bitcoin', 'ethereum', 'forex', 'usd', 'eur', 'gbp', 'jpy',
+    'bull', 'bear', 'rally', 'crash', 'pump', 'dump', 'volatility', 'volume', 'chart', 'analysis',
+    'fed', 'federal reserve', 'interest rate', 'inflation', 'gdp', 'unemployment', 'cpi', 'ppi',
+    'gold', 'silver', 'oil', 'gas', 'commodity', 'bond', 'yield', 'treasury',
+    
+    // Geopolitical & News
+    'war', 'conflict', 'election', 'president', 'government', 'policy', 'sanction', 'trade war',
+    'ukraine', 'russia', 'china', 'usa', 'europe', 'middle east', 'israel', 'palestine',
+    'nato', 'un', 'united nations', 'g7', 'g20', 'summit', 'meeting', 'agreement', 'treaty',
+    
+    // Time-sensitive indicators
+    'today', 'now', 'current', 'latest', 'recent', 'breaking', 'news', 'update', 'live',
+    'right now', 'this moment', 'currently', 'just happened', 'happening',
+    
+    // Weather & Events
+    'weather', 'temperature', 'rain', 'storm', 'hurricane', 'earthquake', 'disaster',
+    'sports', 'match', 'game', 'won', 'lost', 'score', 'championship', 'tournament',
+    
+    // Technology & Companies
+    'apple', 'microsoft', 'google', 'amazon', 'tesla', 'nvidia', 'meta', 'netflix',
+    'earnings', 'revenue', 'profit', 'loss', 'ipo', 'merger', 'acquisition',
+    
+    // Specific market terms
+    'dow jones', 'nasdaq', 's&p 500', 'ftse', 'nikkei', 'hang seng', 'dax',
+    'binance', 'coinbase', 'ftx', 'kraken', 'bybit', 'okx'
   ];
   
-  const lowerMessage = message.toLowerCase();
-  return realTimeKeywords.some(keyword => lowerMessage.includes(keyword));
+  // Question patterns that likely need current info
+  const questionPatterns = [
+    'what is', 'what are', 'what\'s', 'whats', 'how much', 'how many',
+    'who is', 'who are', 'who won', 'who lost', 'where is', 'when is',
+    'why is', 'why are', 'how is', 'how are', 'tell me about',
+    'what happened', 'what\'s happening', 'any news', 'latest on'
+  ];
+  
+  // Check for always-search keywords
+  const hasMarketKeywords = alwaysSearchKeywords.some(keyword => lowerMessage.includes(keyword));
+  
+  // Check for question patterns
+  const hasQuestionPattern = questionPatterns.some(pattern => lowerMessage.includes(pattern));
+  
+  // Check for specific entities that need current info
+  const hasSpecificEntities = /\b(bitcoin|btc|ethereum|eth|tesla|apple|microsoft|google|amazon|nvidia|meta|netflix|dow|nasdaq|s&p|ftse|nikkei|dax|fed|ecb|boe|rbi|pboc)\b/i.test(lowerMessage);
+  
+  // Check for country/region mentions
+  const hasGeopolitical = /\b(usa|america|china|russia|ukraine|europe|japan|india|pakistan|israel|palestine|iran|north korea|south korea|taiwan|hong kong|singapore|uk|germany|france|italy|spain|canada|australia|brazil|mexico)\b/i.test(lowerMessage);
+  
+  // Check for currency mentions
+  const hasCurrency = /\b(usd|eur|gbp|jpy|cny|inr|pkr|aud|cad|chf|nzd|krw|sgd|hkd|mxn|brl|rub|try|zar)\b/i.test(lowerMessage);
+  
+  // Always search if any of these conditions are met
+  return hasMarketKeywords || hasQuestionPattern || hasSpecificEntities || hasGeopolitical || hasCurrency;
 }
 
-// Function to perform web search using Serper.dev
+// Enhanced web search function with better query optimization
 async function performWebSearch(query: string): Promise<string> {
   try {
     const serperApiKey = Deno.env.get('SERPER_API_KEY');
@@ -66,13 +112,32 @@ async function performWebSearch(query: string): Promise<string> {
       return '';
     }
 
+    // Optimize search query for better results
+    let optimizedQuery = query;
+    
+    // Add current date context for time-sensitive queries
+    const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    if (needsTimeContext(query)) {
+      optimizedQuery = `${query} ${currentDate}`;
+    }
+    
+    // Add specific search terms for better financial data
+    if (isFinancialQuery(query)) {
+      optimizedQuery = `${query} price market analysis`;
+    }
+
+    console.log('Performing web search for:', optimizedQuery);
+
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',
       headers: {
         'X-API-KEY': serperApiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ q: query }),
+      body: JSON.stringify({ 
+        q: optimizedQuery,
+        num: 5 // Get more results for better context
+      }),
     });
 
     if (!response.ok) {
@@ -82,19 +147,36 @@ async function performWebSearch(query: string): Promise<string> {
 
     const data = await response.json();
     
-    // Extract top 3 results
-    const results: SearchResult[] = (data.organic || []).slice(0, 3).map((result: any) => ({
+    // Extract top 5 results for more comprehensive context
+    const results: SearchResult[] = (data.organic || []).slice(0, 5).map((result: any) => ({
       title: result.title || '',
       snippet: result.snippet || '',
       link: result.link || '',
     }));
 
-    if (results.length === 0) {
+    // Also include knowledge graph if available
+    let knowledgeGraph = '';
+    if (data.knowledgeGraph) {
+      knowledgeGraph = `📊 Quick Facts: ${data.knowledgeGraph.title || ''} - ${data.knowledgeGraph.description || ''}\n\n`;
+    }
+
+    // Include answer box if available
+    let answerBox = '';
+    if (data.answerBox) {
+      answerBox = `💡 Direct Answer: ${data.answerBox.answer || data.answerBox.snippet || ''}\n\n`;
+    }
+
+    if (results.length === 0 && !knowledgeGraph && !answerBox) {
       return '';
     }
 
-    // Format results into a context string
-    let searchContext = `🌐 LIVE SEARCH RESULTS for "${query}":\n\n`;
+    // Format results into a comprehensive context string
+    let searchContext = `🌐 LIVE INTERNET SEARCH RESULTS for "${query}":\n\n`;
+    
+    if (answerBox) searchContext += answerBox;
+    if (knowledgeGraph) searchContext += knowledgeGraph;
+    
+    searchContext += `📰 Latest Information:\n`;
     results.forEach((result, index) => {
       searchContext += `${index + 1}. **${result.title}**\n`;
       searchContext += `   ${result.snippet}\n`;
@@ -106,6 +188,18 @@ async function performWebSearch(query: string): Promise<string> {
     console.error('Web search error:', error);
     return '';
   }
+}
+
+// Helper function to determine if query needs time context
+function needsTimeContext(query: string): boolean {
+  const timeKeywords = ['today', 'now', 'current', 'latest', 'recent', 'breaking'];
+  return timeKeywords.some(keyword => query.toLowerCase().includes(keyword));
+}
+
+// Helper function to identify financial queries
+function isFinancialQuery(query: string): boolean {
+  const financialKeywords = ['price', 'stock', 'crypto', 'bitcoin', 'ethereum', 'market', 'trading', 'forex'];
+  return financialKeywords.some(keyword => query.toLowerCase().includes(keyword));
 }
 
 Deno.serve(async (req) => {
@@ -121,18 +215,32 @@ Deno.serve(async (req) => {
 
     const { message, originalMessage, sessionId, userId, conversationContext, hasLiveData }: ChatRequest = await req.json();
 
-    // Check if we need to perform a web search
+    // Enhanced search logic - search for almost everything except basic greetings
     let searchContext = '';
     let enrichedMessage = message;
     let hasSearchData = false;
 
-    if (needsRealTimeSearch(message)) {
-      console.log('Performing web search for:', message);
+    // Skip search only for very basic interactions
+    const skipSearchPatterns = [
+      /^(hi|hello|hey|good morning|good afternoon|good evening)$/i,
+      /^(thanks|thank you|ok|okay|yes|no)$/i,
+      /^(how are you|what's up|sup)$/i
+    ];
+
+    const shouldSkipSearch = skipSearchPatterns.some(pattern => pattern.test(message.trim()));
+
+    if (!shouldSkipSearch && needsRealTimeSearch(message)) {
+      console.log('🔍 Performing enhanced web search for:', message);
       searchContext = await performWebSearch(message);
       if (searchContext) {
         hasSearchData = true;
         enrichedMessage = `${message}\n\n${searchContext}`;
+        console.log('✅ Search completed successfully');
+      } else {
+        console.log('⚠️ Search returned no results');
       }
+    } else {
+      console.log('⏭️ Skipping search for basic interaction:', message);
     }
 
     // Get user's trading data
@@ -171,7 +279,7 @@ Deno.serve(async (req) => {
     const losingTrades = trades?.filter(trade => trade.profit_loss < 0).length || 0;
     const winRate = trades?.length ? (winningTrades / trades.length) * 100 : 0;
 
-    const systemPrompt = `You are Sydney, an AI trading assistant for Laxmi Chit Fund's trading analytics platform. You are helpful, friendly, conversational, and knowledgeable about trading and markets.
+    const systemPrompt = `You are Sydney, an AI trading assistant for Laxmi Chit Fund's trading analytics platform. You are helpful, friendly, conversational, and knowledgeable about trading, markets, geopolitics, and current events.
 
 PERSONALITY:
 - Be conversational and natural like ChatGPT
@@ -179,9 +287,9 @@ PERSONALITY:
 - Ask follow-up questions to keep conversations flowing
 - Remember context from recent messages
 - Be encouraging and supportive about trading journey
-- Handle both trading topics AND general conversation
-- Show genuine interest in the user's trading progress
-- Be knowledgeable about financial markets, economics, and trading
+- Handle trading topics, current events, geopolitics, markets, and general conversation
+- Show genuine interest in the user's trading progress and world events
+- Be knowledgeable about financial markets, economics, geopolitics, and current affairs
 
 CONVERSATION CONTEXT:
 ${conversationContext || 'No previous conversation'}
@@ -198,14 +306,17 @@ Recent Sessions: ${JSON.stringify(sessions?.slice(0, 3), null, 2)}
 Recent Trades: ${JSON.stringify(trades?.slice(0, 5), null, 2)}
 
 ${hasSearchData ? `
-🌐 LIVE INTERNET SEARCH RESULTS:
-I have access to real-time information from the internet for this query. The search results are included below and are current as of right now.
+🌐 LIVE INTERNET ACCESS - REAL-TIME INFORMATION:
+I have complete access to current internet information for this query. The search results below are live and up-to-date as of right now.
 
-ORIGINAL USER MESSAGE: "${originalMessage || message}"
-SEARCH RESULTS: 
+ORIGINAL USER QUESTION: "${originalMessage || message}"
+
+LIVE SEARCH RESULTS FROM THE INTERNET:
 ${searchContext}
 
-Please use this live data to provide an accurate, up-to-date response. Analyze the information, provide insights, and relate it to trading or the user's question as appropriate.
+IMPORTANT: Use this live internet data to provide accurate, current, and comprehensive responses. This information is fresh from the web and should be your primary source for current events, market data, geopolitical developments, and any time-sensitive information.
+
+Analyze the search results, provide insights, connect dots between different pieces of information, and relate findings to trading/markets when relevant.
 ` : ''}
 
 ${hasLiveData ? `
@@ -218,39 +329,38 @@ ENRICHED MESSAGE WITH LIVE DATA: "${enrichedMessage}"
 Please incorporate the live data naturally into your response. Don't just repeat it - analyze it, provide insights, and relate it to trading.
 ` : ''}
 
-CAPABILITIES:
-1. Analyze trading performance with specific data insights
-2. Provide psychological feedback on trading patterns
-3. Chat about general topics (weather, jokes, life, etc.)
-4. Offer trading education and market insights
-5. Help with risk management advice
-6. Detect concerning trading behaviors
-7. Be a supportive trading companion
-8. Access live market data (crypto, stocks, forex)
-9. Search the web for latest financial news and information
-10. Provide real-time market analysis and commentary
-11. Answer questions about current events, weather, sports, and more using live internet search
+ENHANCED CAPABILITIES WITH COMPLETE INTERNET ACCESS:
+1. Real-time market analysis (crypto, stocks, forex, commodities)
+2. Live geopolitical developments and their market impact
+3. Breaking news and current events analysis
+4. Economic data and central bank decisions
+5. Company earnings, mergers, acquisitions
+6. Weather, sports, and general current events
+7. Cryptocurrency and DeFi developments
+8. Government policies and regulatory changes
+9. International trade and sanctions
+10. Social and political movements affecting markets
+11. Technology trends and their market implications
+12. Energy markets and commodity prices
 
 RESPONSE GUIDELINES:
-- Keep responses conversational and engaging
-- Use specific data from their trading history when relevant
-- Ask follow-up questions to encourage dialogue
-- Be supportive but honest about trading performance
-- Use emojis appropriately (not too many, but enough to be friendly)
-- Vary your responses - don't be repetitive
-- Remember what was discussed recently
-- Handle both serious trading analysis and light conversation
-- When provided with live search results, analyze them and provide insights
-- When provided with news/search results, summarize key points and implications
-- Always be helpful and informative
-- For real-time queries, use the search results to provide accurate, current information
+- Provide comprehensive, well-informed responses using live internet data
+- Connect current events to potential trading/market implications
+- Be analytical and insightful, not just informative
+- Use specific data from search results to support your points
+- Relate geopolitical events to market movements when relevant
+- Explain complex topics in an accessible way
+- Ask follow-up questions to encourage deeper discussion
+- Use emojis appropriately to maintain engagement
+- Always cite that information is current/live when using search results
+- Provide actionable insights for traders when applicable
 
 Current date: ${new Date().toLocaleDateString()}
 Current time: ${new Date().toLocaleTimeString()}
 
-Respond naturally to the user's message. If live search data was provided, incorporate it seamlessly into your response with analysis and insights.`;
+Respond naturally and comprehensively to the user's message. If live internet search data was provided, use it as your primary source for current information and provide detailed analysis and insights.`;
 
-    // Use Gemini API
+    // Use Gemini API with enhanced parameters for better responses
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
       method: 'POST',
       headers: {
@@ -268,10 +378,10 @@ Respond naturally to the user's message. If live search data was provided, incor
           }
         ],
         generationConfig: {
-          temperature: 0.8,
+          temperature: 0.7, // Slightly lower for more factual responses
           topK: 40,
           topP: 0.95,
-          maxOutputTokens: 1000,
+          maxOutputTokens: 1500, // Increased for more comprehensive responses
         }
       }),
     });
@@ -289,7 +399,8 @@ Respond naturally to the user's message. If live search data was provided, incor
       JSON.stringify({ 
         message: aiMessage,
         usage: aiData.usageMetadata,
-        hasLiveData: hasSearchData || hasLiveData
+        hasLiveData: hasSearchData || hasLiveData,
+        searchPerformed: hasSearchData
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
