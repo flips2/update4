@@ -36,6 +36,78 @@ interface TradingSession {
   updated_at: string;
 }
 
+interface SearchResult {
+  title: string;
+  snippet: string;
+  link: string;
+}
+
+// Function to detect if a message needs real-time search
+function needsRealTimeSearch(message: string): boolean {
+  const realTimeKeywords = [
+    'today', 'now', 'current', 'latest', 'recent', 'price', 'weather', 
+    'news', 'won', 'match', 'score', 'live', 'happening', 'update',
+    'right now', 'this moment', 'currently', 'breaking', 'just',
+    'what\'s', 'whats', 'how much', 'who won', 'what happened',
+    'bitcoin price', 'crypto price', 'stock price', 'market',
+    'temperature', 'forecast', 'rain', 'sunny', 'cloudy'
+  ];
+  
+  const lowerMessage = message.toLowerCase();
+  return realTimeKeywords.some(keyword => lowerMessage.includes(keyword));
+}
+
+// Function to perform web search using Serper.dev
+async function performWebSearch(query: string): Promise<string> {
+  try {
+    const serperApiKey = Deno.env.get('SERPER_API_KEY');
+    if (!serperApiKey) {
+      console.warn('SERPER_API_KEY not found, skipping web search');
+      return '';
+    }
+
+    const response = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': serperApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ q: query }),
+    });
+
+    if (!response.ok) {
+      console.error('Serper API error:', response.status, response.statusText);
+      return '';
+    }
+
+    const data = await response.json();
+    
+    // Extract top 3 results
+    const results: SearchResult[] = (data.organic || []).slice(0, 3).map((result: any) => ({
+      title: result.title || '',
+      snippet: result.snippet || '',
+      link: result.link || '',
+    }));
+
+    if (results.length === 0) {
+      return '';
+    }
+
+    // Format results into a context string
+    let searchContext = `🌐 LIVE SEARCH RESULTS for "${query}":\n\n`;
+    results.forEach((result, index) => {
+      searchContext += `${index + 1}. **${result.title}**\n`;
+      searchContext += `   ${result.snippet}\n`;
+      searchContext += `   Source: ${result.link}\n\n`;
+    });
+
+    return searchContext;
+  } catch (error) {
+    console.error('Web search error:', error);
+    return '';
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -48,6 +120,20 @@ Deno.serve(async (req) => {
     );
 
     const { message, originalMessage, sessionId, userId, conversationContext, hasLiveData }: ChatRequest = await req.json();
+
+    // Check if we need to perform a web search
+    let searchContext = '';
+    let enrichedMessage = message;
+    let hasSearchData = false;
+
+    if (needsRealTimeSearch(message)) {
+      console.log('Performing web search for:', message);
+      searchContext = await performWebSearch(message);
+      if (searchContext) {
+        hasSearchData = true;
+        enrichedMessage = `${message}\n\n${searchContext}`;
+      }
+    }
 
     // Get user's trading data
     const { data: sessions, error: sessionsError } = await supabaseClient
@@ -111,12 +197,23 @@ USER'S TRADING DATA SUMMARY:
 Recent Sessions: ${JSON.stringify(sessions?.slice(0, 3), null, 2)}
 Recent Trades: ${JSON.stringify(trades?.slice(0, 5), null, 2)}
 
+${hasSearchData ? `
+🌐 LIVE INTERNET SEARCH RESULTS:
+I have access to real-time information from the internet for this query. The search results are included below and are current as of right now.
+
+ORIGINAL USER MESSAGE: "${originalMessage || message}"
+SEARCH RESULTS: 
+${searchContext}
+
+Please use this live data to provide an accurate, up-to-date response. Analyze the information, provide insights, and relate it to trading or the user's question as appropriate.
+` : ''}
+
 ${hasLiveData ? `
 🌐 LIVE DATA INTEGRATION:
 The user's message has been enriched with real-time market data or web search results. This information is current and accurate. Use it naturally in your response.
 
 ORIGINAL USER MESSAGE: "${originalMessage}"
-ENRICHED MESSAGE WITH LIVE DATA: "${message}"
+ENRICHED MESSAGE WITH LIVE DATA: "${enrichedMessage}"
 
 Please incorporate the live data naturally into your response. Don't just repeat it - analyze it, provide insights, and relate it to trading.
 ` : ''}
@@ -132,6 +229,7 @@ CAPABILITIES:
 8. Access live market data (crypto, stocks, forex)
 9. Search the web for latest financial news and information
 10. Provide real-time market analysis and commentary
+11. Answer questions about current events, weather, sports, and more using live internet search
 
 RESPONSE GUIDELINES:
 - Keep responses conversational and engaging
@@ -142,14 +240,15 @@ RESPONSE GUIDELINES:
 - Vary your responses - don't be repetitive
 - Remember what was discussed recently
 - Handle both serious trading analysis and light conversation
-- When provided with live market data, analyze it and provide insights
+- When provided with live search results, analyze them and provide insights
 - When provided with news/search results, summarize key points and implications
 - Always be helpful and informative
+- For real-time queries, use the search results to provide accurate, current information
 
 Current date: ${new Date().toLocaleDateString()}
 Current time: ${new Date().toLocaleTimeString()}
 
-Respond naturally to the user's message. If live data was provided, incorporate it seamlessly into your response with analysis and insights.`;
+Respond naturally to the user's message. If live search data was provided, incorporate it seamlessly into your response with analysis and insights.`;
 
     // Use Gemini API
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
@@ -189,7 +288,8 @@ Respond naturally to the user's message. If live data was provided, incorporate 
     return new Response(
       JSON.stringify({ 
         message: aiMessage,
-        usage: aiData.usageMetadata 
+        usage: aiData.usageMetadata,
+        hasLiveData: hasSearchData || hasLiveData
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
