@@ -42,91 +42,61 @@ interface SearchResult {
   link: string;
 }
 
-// Enhanced function to detect if a message needs real-time search
+// Simplified function - search for almost everything except basic greetings
 function needsRealTimeSearch(message: string): boolean {
   const lowerMessage = message.toLowerCase().trim();
   
-  // Always search for these high-priority categories
-  const alwaysSearchKeywords = [
-    // Market & Financial
-    'price', 'market', 'trading', 'stock', 'crypto', 'bitcoin', 'ethereum', 'forex', 'usd', 'eur', 'gbp', 'jpy',
-    'bull', 'bear', 'rally', 'crash', 'pump', 'dump', 'volatility', 'volume', 'chart', 'analysis',
-    'fed', 'federal reserve', 'interest rate', 'inflation', 'gdp', 'unemployment', 'cpi', 'ppi',
-    'gold', 'silver', 'oil', 'gas', 'commodity', 'bond', 'yield', 'treasury',
-    
-    // Geopolitical & News
-    'war', 'conflict', 'election', 'president', 'government', 'policy', 'sanction', 'trade war',
-    'ukraine', 'russia', 'china', 'usa', 'europe', 'middle east', 'israel', 'palestine',
-    'nato', 'un', 'united nations', 'g7', 'g20', 'summit', 'meeting', 'agreement', 'treaty',
-    
-    // Time-sensitive indicators
-    'today', 'now', 'current', 'latest', 'recent', 'breaking', 'news', 'update', 'live',
-    'right now', 'this moment', 'currently', 'just happened', 'happening',
-    
-    // Weather & Events
-    'weather', 'temperature', 'rain', 'storm', 'hurricane', 'earthquake', 'disaster',
-    'sports', 'match', 'game', 'won', 'lost', 'score', 'championship', 'tournament',
-    
-    // Technology & Companies
-    'apple', 'microsoft', 'google', 'amazon', 'tesla', 'nvidia', 'meta', 'netflix',
-    'earnings', 'revenue', 'profit', 'loss', 'ipo', 'merger', 'acquisition',
-    
-    // Specific market terms
-    'dow jones', 'nasdaq', 's&p 500', 'ftse', 'nikkei', 'hang seng', 'dax',
-    'binance', 'coinbase', 'ftx', 'kraken', 'bybit', 'okx'
+  // Only skip search for very basic greetings
+  const skipPatterns = [
+    /^(hi|hello|hey)$/,
+    /^(thanks|thank you|ok|okay)$/,
+    /^(yes|no)$/
   ];
   
-  // Question patterns that likely need current info
-  const questionPatterns = [
-    'what is', 'what are', 'what\'s', 'whats', 'how much', 'how many',
-    'who is', 'who are', 'who won', 'who lost', 'where is', 'when is',
-    'why is', 'why are', 'how is', 'how are', 'tell me about',
-    'what happened', 'what\'s happening', 'any news', 'latest on'
-  ];
+  const shouldSkip = skipPatterns.some(pattern => pattern.test(lowerMessage));
   
-  // Check for always-search keywords
-  const hasMarketKeywords = alwaysSearchKeywords.some(keyword => lowerMessage.includes(keyword));
-  
-  // Check for question patterns
-  const hasQuestionPattern = questionPatterns.some(pattern => lowerMessage.includes(pattern));
-  
-  // Check for specific entities that need current info
-  const hasSpecificEntities = /\b(bitcoin|btc|ethereum|eth|tesla|apple|microsoft|google|amazon|nvidia|meta|netflix|dow|nasdaq|s&p|ftse|nikkei|dax|fed|ecb|boe|rbi|pboc)\b/i.test(lowerMessage);
-  
-  // Check for country/region mentions
-  const hasGeopolitical = /\b(usa|america|china|russia|ukraine|europe|japan|india|pakistan|israel|palestine|iran|north korea|south korea|taiwan|hong kong|singapore|uk|germany|france|italy|spain|canada|australia|brazil|mexico)\b/i.test(lowerMessage);
-  
-  // Check for currency mentions
-  const hasCurrency = /\b(usd|eur|gbp|jpy|cny|inr|pkr|aud|cad|chf|nzd|krw|sgd|hkd|mxn|brl|rub|try|zar)\b/i.test(lowerMessage);
-  
-  // Always search if any of these conditions are met
-  return hasMarketKeywords || hasQuestionPattern || hasSpecificEntities || hasGeopolitical || hasCurrency;
+  console.log(`🔍 Search decision for "${message}": ${shouldSkip ? 'SKIP' : 'SEARCH'}`);
+  return !shouldSkip;
 }
 
-// Enhanced web search function with better query optimization
+// Enhanced web search function with comprehensive error handling
 async function performWebSearch(query: string): Promise<string> {
+  console.log('🌐 Starting web search for:', query);
+  
   try {
-    const serperApiKey = Deno.env.get('SERPER_API_KEY');
+    // Check environment variable first
+    let serperApiKey = Deno.env.get('SERPER_API_KEY');
+    console.log('🔑 SERPER_API_KEY from env:', serperApiKey ? 'Found' : 'Not found');
+    
+    // Use hardcoded key for debugging if env var not found
     if (!serperApiKey) {
-      console.warn('SERPER_API_KEY not found, skipping web search');
-      return '';
+      serperApiKey = 'd37d92d960bfa9381d3c6151a15779d9613c2706';
+      console.log('🔑 Using hardcoded API key for debugging');
     }
 
-    // Optimize search query for better results
+    // Optimize search query
     let optimizedQuery = query;
     
-    // Add current date context for time-sensitive queries
-    const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-    if (needsTimeContext(query)) {
+    // Add current date for time-sensitive queries
+    if (query.toLowerCase().includes('today') || query.toLowerCase().includes('now') || query.toLowerCase().includes('current')) {
+      const currentDate = new Date().toISOString().split('T')[0];
       optimizedQuery = `${query} ${currentDate}`;
     }
     
-    // Add specific search terms for better financial data
-    if (isFinancialQuery(query)) {
-      optimizedQuery = `${query} price market analysis`;
+    // Add market context for financial queries
+    if (query.toLowerCase().includes('price') || query.toLowerCase().includes('bitcoin') || query.toLowerCase().includes('stock')) {
+      optimizedQuery = `${query} latest market data`;
     }
 
-    console.log('Performing web search for:', optimizedQuery);
+    console.log('🔍 Optimized search query:', optimizedQuery);
+
+    const requestBody = { 
+      q: optimizedQuery,
+      num: 5
+    };
+    
+    console.log('📤 Sending request to Serper API...');
+    console.log('📤 Request body:', JSON.stringify(requestBody));
 
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',
@@ -134,47 +104,49 @@ async function performWebSearch(query: string): Promise<string> {
         'X-API-KEY': serperApiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
-        q: optimizedQuery,
-        num: 5 // Get more results for better context
-      }),
+      body: JSON.stringify(requestBody),
     });
 
+    console.log('📥 Serper API response status:', response.status);
+    console.log('📥 Serper API response headers:', Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      console.error('Serper API error:', response.status, response.statusText);
+      const errorText = await response.text();
+      console.error('❌ Serper API error:', response.status, response.statusText);
+      console.error('❌ Error response body:', errorText);
       return '';
     }
 
     const data = await response.json();
-    
-    // Extract top 5 results for more comprehensive context
+    console.log('📊 Serper API response data keys:', Object.keys(data));
+    console.log('📊 Number of organic results:', data.organic?.length || 0);
+
+    // Extract search results
     const results: SearchResult[] = (data.organic || []).slice(0, 5).map((result: any) => ({
       title: result.title || '',
       snippet: result.snippet || '',
       link: result.link || '',
     }));
 
-    // Also include knowledge graph if available
-    let knowledgeGraph = '';
-    if (data.knowledgeGraph) {
-      knowledgeGraph = `📊 Quick Facts: ${data.knowledgeGraph.title || ''} - ${data.knowledgeGraph.description || ''}\n\n`;
-    }
+    console.log('📋 Extracted results count:', results.length);
 
-    // Include answer box if available
-    let answerBox = '';
-    if (data.answerBox) {
-      answerBox = `💡 Direct Answer: ${data.answerBox.answer || data.answerBox.snippet || ''}\n\n`;
-    }
-
-    if (results.length === 0 && !knowledgeGraph && !answerBox) {
+    if (results.length === 0) {
+      console.log('⚠️ No search results found');
       return '';
     }
 
-    // Format results into a comprehensive context string
-    let searchContext = `🌐 LIVE INTERNET SEARCH RESULTS for "${query}":\n\n`;
+    // Format comprehensive search context
+    let searchContext = `🌐 LIVE SEARCH RESULTS for "${query}":\n\n`;
     
-    if (answerBox) searchContext += answerBox;
-    if (knowledgeGraph) searchContext += knowledgeGraph;
+    // Include knowledge graph if available
+    if (data.knowledgeGraph) {
+      searchContext += `📊 Quick Facts: ${data.knowledgeGraph.title || ''} - ${data.knowledgeGraph.description || ''}\n\n`;
+    }
+
+    // Include answer box if available
+    if (data.answerBox) {
+      searchContext += `💡 Direct Answer: ${data.answerBox.answer || data.answerBox.snippet || ''}\n\n`;
+    }
     
     searchContext += `📰 Latest Information:\n`;
     results.forEach((result, index) => {
@@ -183,23 +155,16 @@ async function performWebSearch(query: string): Promise<string> {
       searchContext += `   Source: ${result.link}\n\n`;
     });
 
+    console.log('✅ Search context generated successfully, length:', searchContext.length);
+    console.log('📄 Search context preview:', searchContext.substring(0, 200) + '...');
+
     return searchContext;
   } catch (error) {
-    console.error('Web search error:', error);
+    console.error('❌ Web search error:', error);
+    console.error('❌ Error details:', error.message);
+    console.error('❌ Error stack:', error.stack);
     return '';
   }
-}
-
-// Helper function to determine if query needs time context
-function needsTimeContext(query: string): boolean {
-  const timeKeywords = ['today', 'now', 'current', 'latest', 'recent', 'breaking'];
-  return timeKeywords.some(keyword => query.toLowerCase().includes(keyword));
-}
-
-// Helper function to identify financial queries
-function isFinancialQuery(query: string): boolean {
-  const financialKeywords = ['price', 'stock', 'crypto', 'bitcoin', 'ethereum', 'market', 'trading', 'forex'];
-  return financialKeywords.some(keyword => query.toLowerCase().includes(keyword));
 }
 
 Deno.serve(async (req) => {
@@ -208,39 +173,35 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log('🚀 AI Chat function started');
+    
+    // Log environment variable status
+    const serperKey = Deno.env.get('SERPER_API_KEY');
+    console.log('🔑 Environment check - SERPER_API_KEY:', serperKey ? 'Available' : 'Missing');
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     const { message, originalMessage, sessionId, userId, conversationContext, hasLiveData }: ChatRequest = await req.json();
+    console.log('📨 Received message:', message);
 
-    // Enhanced search logic - search for almost everything except basic greetings
+    // TEMPORARILY BYPASS CONDITION FOR TESTING - ALWAYS SEARCH
+    console.log('🧪 TESTING MODE: Performing search for all messages');
+    
     let searchContext = '';
-    let enrichedMessage = message;
     let hasSearchData = false;
 
-    // Skip search only for very basic interactions
-    const skipSearchPatterns = [
-      /^(hi|hello|hey|good morning|good afternoon|good evening)$/i,
-      /^(thanks|thank you|ok|okay|yes|no)$/i,
-      /^(how are you|what's up|sup)$/i
-    ];
-
-    const shouldSkipSearch = skipSearchPatterns.some(pattern => pattern.test(message.trim()));
-
-    if (!shouldSkipSearch && needsRealTimeSearch(message)) {
-      console.log('🔍 Performing enhanced web search for:', message);
-      searchContext = await performWebSearch(message);
-      if (searchContext) {
-        hasSearchData = true;
-        enrichedMessage = `${message}\n\n${searchContext}`;
-        console.log('✅ Search completed successfully');
-      } else {
-        console.log('⚠️ Search returned no results');
-      }
+    // Perform search for every message (testing mode)
+    console.log('🔍 Initiating web search...');
+    searchContext = await performWebSearch(message);
+    
+    if (searchContext) {
+      hasSearchData = true;
+      console.log('✅ Search successful - context length:', searchContext.length);
     } else {
-      console.log('⏭️ Skipping search for basic interaction:', message);
+      console.log('❌ Search failed or returned empty results');
     }
 
     // Get user's trading data
@@ -264,103 +225,57 @@ Deno.serve(async (req) => {
       throw new Error('Failed to fetch trades');
     }
 
-    // Prepare context for AI
-    const tradingContext = {
-      sessions: sessions || [],
-      trades: trades || [],
-      totalSessions: sessions?.length || 0,
-      totalTrades: trades?.length || 0,
-      currentDate: new Date().toISOString(),
-    };
-
-    // Calculate some basic stats for context
+    // Calculate trading stats
     const totalProfit = trades?.reduce((sum, trade) => sum + trade.profit_loss, 0) || 0;
     const winningTrades = trades?.filter(trade => trade.profit_loss > 0).length || 0;
     const losingTrades = trades?.filter(trade => trade.profit_loss < 0).length || 0;
     const winRate = trades?.length ? (winningTrades / trades.length) * 100 : 0;
 
-    const systemPrompt = `You are Sydney, an AI trading assistant for Laxmi Chit Fund's trading analytics platform. You are helpful, friendly, conversational, and knowledgeable about trading, markets, geopolitics, and current events.
+    // Create enhanced system prompt with search results
+    const systemPrompt = `You are Sydney, an AI trading assistant with COMPLETE INTERNET ACCESS. You are helpful, friendly, conversational, and knowledgeable about trading, markets, geopolitics, and current events.
 
 PERSONALITY:
 - Be conversational and natural like ChatGPT
-- Use appropriate emojis to make responses engaging (but not too many)
+- Use appropriate emojis to make responses engaging
 - Ask follow-up questions to keep conversations flowing
-- Remember context from recent messages
 - Be encouraging and supportive about trading journey
 - Handle trading topics, current events, geopolitics, markets, and general conversation
-- Show genuine interest in the user's trading progress and world events
-- Be knowledgeable about financial markets, economics, geopolitics, and current affairs
+- Show genuine interest in world events and trading progress
 
-CONVERSATION CONTEXT:
-${conversationContext || 'No previous conversation'}
-
-USER'S TRADING DATA SUMMARY:
-- Total Sessions: ${tradingContext.totalSessions}
-- Total Trades: ${tradingContext.totalTrades}
+USER'S TRADING DATA:
+- Total Sessions: ${sessions?.length || 0}
+- Total Trades: ${trades?.length || 0}
 - Total P/L: $${totalProfit.toFixed(2)}
 - Win Rate: ${winRate.toFixed(1)}%
-- Winning Trades: ${winningTrades}
-- Losing Trades: ${losingTrades}
-
-Recent Sessions: ${JSON.stringify(sessions?.slice(0, 3), null, 2)}
-Recent Trades: ${JSON.stringify(trades?.slice(0, 5), null, 2)}
 
 ${hasSearchData ? `
-🌐 LIVE INTERNET ACCESS - REAL-TIME INFORMATION:
-I have complete access to current internet information for this query. The search results below are live and up-to-date as of right now.
+🌐 LIVE INTERNET SEARCH RESULTS:
+I have access to real-time internet information for your question. Here are the latest search results:
 
-ORIGINAL USER QUESTION: "${originalMessage || message}"
-
-LIVE SEARCH RESULTS FROM THE INTERNET:
 ${searchContext}
 
-IMPORTANT: Use this live internet data to provide accurate, current, and comprehensive responses. This information is fresh from the web and should be your primary source for current events, market data, geopolitical developments, and any time-sensitive information.
-
-Analyze the search results, provide insights, connect dots between different pieces of information, and relate findings to trading/markets when relevant.
+IMPORTANT: Use this live internet data as your primary source. This information is current and up-to-date. Analyze it, provide insights, and relate it to trading/markets when relevant.
 ` : ''}
 
-${hasLiveData ? `
-🌐 LIVE DATA INTEGRATION:
-The user's message has been enriched with real-time market data or web search results. This information is current and accurate. Use it naturally in your response.
+CAPABILITIES:
+- Real-time market data and analysis
+- Live geopolitical developments
+- Breaking news and current events
+- Economic data and central bank decisions
+- Cryptocurrency and stock market updates
+- Weather, sports, and general information
+- Company earnings and financial news
 
-ORIGINAL USER MESSAGE: "${originalMessage}"
-ENRICHED MESSAGE WITH LIVE DATA: "${enrichedMessage}"
+USER QUESTION: "${message}"
 
-Please incorporate the live data naturally into your response. Don't just repeat it - analyze it, provide insights, and relate it to trading.
-` : ''}
-
-ENHANCED CAPABILITIES WITH COMPLETE INTERNET ACCESS:
-1. Real-time market analysis (crypto, stocks, forex, commodities)
-2. Live geopolitical developments and their market impact
-3. Breaking news and current events analysis
-4. Economic data and central bank decisions
-5. Company earnings, mergers, acquisitions
-6. Weather, sports, and general current events
-7. Cryptocurrency and DeFi developments
-8. Government policies and regulatory changes
-9. International trade and sanctions
-10. Social and political movements affecting markets
-11. Technology trends and their market implications
-12. Energy markets and commodity prices
-
-RESPONSE GUIDELINES:
-- Provide comprehensive, well-informed responses using live internet data
-- Connect current events to potential trading/market implications
-- Be analytical and insightful, not just informative
-- Use specific data from search results to support your points
-- Relate geopolitical events to market movements when relevant
-- Explain complex topics in an accessible way
-- Ask follow-up questions to encourage deeper discussion
-- Use emojis appropriately to maintain engagement
-- Always cite that information is current/live when using search results
-- Provide actionable insights for traders when applicable
+Provide a comprehensive, well-informed response using the live search data above. Connect current events to trading implications when relevant. Be analytical and insightful.
 
 Current date: ${new Date().toLocaleDateString()}
-Current time: ${new Date().toLocaleTimeString()}
+Current time: ${new Date().toLocaleTimeString()}`;
 
-Respond naturally and comprehensively to the user's message. If live internet search data was provided, use it as your primary source for current information and provide detailed analysis and insights.`;
+    console.log('🤖 Sending request to Gemini API...');
 
-    // Use Gemini API with enhanced parameters for better responses
+    // Use Gemini API
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
       method: 'POST',
       headers: {
@@ -378,29 +293,37 @@ Respond naturally and comprehensively to the user's message. If live internet se
           }
         ],
         generationConfig: {
-          temperature: 0.7, // Slightly lower for more factual responses
+          temperature: 0.7,
           topK: 40,
           topP: 0.95,
-          maxOutputTokens: 1500, // Increased for more comprehensive responses
+          maxOutputTokens: 1500,
         }
       }),
     });
 
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
-      console.error('Gemini API error:', errorText);
+      console.error('❌ Gemini API error:', errorText);
       throw new Error('Gemini API request failed');
     }
 
     const aiData = await geminiResponse.json();
     const aiMessage = aiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not process your request.';
 
+    console.log('✅ AI response generated successfully');
+    console.log('📊 Response length:', aiMessage.length);
+
     return new Response(
       JSON.stringify({ 
         message: aiMessage,
         usage: aiData.usageMetadata,
-        hasLiveData: hasSearchData || hasLiveData,
-        searchPerformed: hasSearchData
+        hasLiveData: hasSearchData,
+        searchPerformed: hasSearchData,
+        debugInfo: {
+          searchContextLength: searchContext.length,
+          apiKeyAvailable: !!serperKey,
+          searchQuery: message
+        }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -408,7 +331,7 @@ Respond naturally and comprehensively to the user's message. If live internet se
     );
 
   } catch (error) {
-    console.error('Error in AI chat function:', error);
+    console.error('❌ Error in AI chat function:', error);
     return new Response(
       JSON.stringify({ 
         error: 'Failed to process chat request',
