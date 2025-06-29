@@ -199,6 +199,34 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
     return undefined;
   }
 
+  private normalizeReason(value: any): string | undefined {
+    if (!value || value === null || value === undefined) return undefined;
+    
+    // Convert to string and clean up
+    const reasonStr = value.toString().trim().toLowerCase();
+    
+    // Map known variations to database-accepted values
+    if (reasonStr.includes('tp') || reasonStr.includes('take profit') || reasonStr.includes('takeprofit')) {
+      return 'TP';
+    }
+    
+    if (reasonStr.includes('sl') || reasonStr.includes('stop loss') || reasonStr.includes('stoploss')) {
+      return 'SL';
+    }
+    
+    if (reasonStr.includes('early') || reasonStr.includes('manual') || reasonStr.includes('close')) {
+      return 'Early Close';
+    }
+    
+    // If it's already in the correct format, return as is
+    if (['TP', 'SL', 'Early Close', 'Other'].includes(reasonStr.toUpperCase())) {
+      return reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1).toLowerCase();
+    }
+    
+    // Default to 'Other' for any unrecognized reason to prevent constraint violations
+    return 'Other';
+  }
+
   private validateAndCleanExtractedData(data: any): ExtractedTradeData {
     // Ensure all expected fields exist and have proper types
     const cleanData: ExtractedTradeData = {
@@ -212,7 +240,7 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
       position: this.normalizePosition(data.position), // Apply position normalization
       openTime: this.parseDateTime(data.openTime),
       closeTime: this.parseDateTime(data.closeTime),
-      reason: data.reason || undefined,
+      reason: this.normalizeReason(data.reason), // Apply reason normalization
       pnlUsd: this.parseNumber(data.pnlUsd)
     };
 
@@ -568,7 +596,8 @@ MANDATORY: Extract ALL visible numeric values and times. Do NOT return null for 
       closePrice: this.parseNumber(data.avgClosePrice),
       pnlUsd: this.parseNumber(data.realizedPnl),
       volumeLot: this.parseNumber(data.closingQuantity),
-      position: this.normalizePosition(data.status || 'Closed') // Apply position normalization for crypto data too
+      position: this.normalizePosition(data.status || 'Closed'), // Apply position normalization for crypto data too
+      reason: this.normalizeReason(data.reason) // Apply reason normalization for crypto data too
     };
 
     return cleanData;
