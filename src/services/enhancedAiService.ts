@@ -176,6 +176,29 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
     }
   }
 
+  private normalizePosition(value: any): string | undefined {
+    if (!value || value === null || value === undefined) return undefined;
+    
+    // Convert to string and clean up
+    const positionStr = value.toString().trim().toLowerCase();
+    
+    // Map known variations to database-accepted values
+    if (positionStr.includes('closed') || positionStr === 'all closed' || positionStr === 'close') {
+      return 'Closed';
+    }
+    
+    if (positionStr.includes('open') || positionStr === 'opened') {
+      return 'Open';
+    }
+    
+    // If it's already in the correct format, return as is
+    if (positionStr === 'open') return 'Open';
+    if (positionStr === 'closed') return 'Closed';
+    
+    // If we can't recognize the value, return undefined to let the database handle it
+    return undefined;
+  }
+
   private validateAndCleanExtractedData(data: any): ExtractedTradeData {
     // Ensure all expected fields exist and have proper types
     const cleanData: ExtractedTradeData = {
@@ -186,7 +209,7 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
       closePrice: this.parseNumber(data.closePrice),
       tp: this.parseNumber(data.tp),
       sl: this.parseNumber(data.sl),
-      position: data.position || undefined,
+      position: this.normalizePosition(data.position), // Apply position normalization
       openTime: this.parseDateTime(data.openTime),
       closeTime: this.parseDateTime(data.closeTime),
       reason: data.reason || undefined,
@@ -544,7 +567,8 @@ MANDATORY: Extract ALL visible numeric values and times. Do NOT return null for 
       openPrice: this.parseNumber(data.avgEntryPrice),
       closePrice: this.parseNumber(data.avgClosePrice),
       pnlUsd: this.parseNumber(data.realizedPnl),
-      volumeLot: this.parseNumber(data.closingQuantity)
+      volumeLot: this.parseNumber(data.closingQuantity),
+      position: this.normalizePosition(data.status || 'Closed') // Apply position normalization for crypto data too
     };
 
     return cleanData;
