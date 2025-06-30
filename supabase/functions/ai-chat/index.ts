@@ -36,82 +36,59 @@ interface TradingSession {
   updated_at: string;
 }
 
-// Log environment variable at the top
-console.log('🔑 SERPER_API_KEY is:', Deno.env.get('SERPER_API_KEY'));
-
-// Enhanced web search function with comprehensive debugging
+// Web search function using native fetch() for Deno compatibility
 async function performWebSearch(query: string): Promise<string> {
-  console.log('🔍 About to call Serper.dev with query:', query);
+  console.log('🔍 Starting web search for:', query);
   
   try {
-    // Get API key with fallback
-    let serperApiKey = Deno.env.get('SERPER_API_KEY');
-    if (!serperApiKey) {
-      serperApiKey = 'd37d92d960bfa9381d3c6151a15779d9613c2706';
-      console.log('🔑 Using hardcoded API key as fallback');
-    }
-
-    const requestBody = { 
-      q: query,
-      num: 5
-    };
-
-    // Log the full request configuration
-    const config = {
-      method: 'POST',
-      url: 'https://google.serper.dev/search',
-      headers: {
-        'X-API-KEY': serperApiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody)
-    };
-    
-    console.log('⚙️ Request config:', JSON.stringify(config, null, 2));
-    console.log('📤 Making request to Serper.dev...');
-
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',
       headers: {
-        'X-API-KEY': serperApiKey,
+        'X-API-KEY': 'd37d92d960bfa9381d3c6151a15779d9613c2706',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        q: query,
+        num: 5
+      })
     });
 
-    console.log('📥 Response status:', response.status);
-    console.log('📥 Response headers:', Object.fromEntries(response.headers.entries()));
+    console.log('📡 Serper response status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Serper.dev request failed - Status:', response.status);
-      console.error('❌ Error response:', errorText);
-      throw new Error(`Serper API error: ${response.status} - ${errorText}`);
+      console.error('❌ Serper API error:', response.status, errorText);
+      throw new Error(`Serper API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('📊 Serper response data keys:', Object.keys(data));
-    console.log('📊 Number of results:', data.organic?.length || 0);
-
-    // Format search results
-    const results = (data.organic || []).slice(0, 3);
-    let searchContext = `Search Results:\n\n`;
+    console.log('📊 Serper returned', data.organic?.length || 0, 'results');
     
-    results.forEach((result: any, index: number) => {
-      searchContext += `${index + 1}. ${result.title}\n`;
-      searchContext += `${result.snippet}\n`;
-      searchContext += `${result.link}\n\n`;
-    });
-
-    console.log('📥 Serper.dev returned:', searchContext.substring(0, 200) + '...');
-    return searchContext;
-
-  } catch (err) {
-    console.error('❌ Serper.dev request failed:', err);
-    console.error('❌ Error details:', err.message);
-    console.error('❌ Error stack:', err.stack);
-    throw err;
+    // Format results for Gemini
+    const results = data.organic?.slice(0, 5).map((result: any) => 
+      `Title: ${result.title}\nSnippet: ${result.snippet}\nURL: ${result.link}`
+    ).join('\n\n') || 'No results found';
+    
+    console.log('✅ Serper search successful, credits should be used');
+    return `LIVE SEARCH RESULTS:\n\n${results}`;
+    
+  } catch (error) {
+    console.error('❌ Web search failed:', error);
+    return 'Search unavailable';
   }
+}
+
+// Smart search detection
+function needsRealTimeSearch(message: string): boolean {
+  const searchKeywords = [
+    'current', 'now', 'today', 'latest', 'recent', 'news',
+    'weather', 'price', 'bitcoin', 'crypto', 'stock',
+    'war', 'election', 'breaking', 'update', 'situation',
+    'who won', 'score', 'match', 'game', 'live'
+  ];
+  
+  const lowerMessage = message.toLowerCase();
+  return searchKeywords.some(keyword => lowerMessage.includes(keyword));
 }
 
 Deno.serve(async (req) => {
@@ -126,18 +103,6 @@ Deno.serve(async (req) => {
     );
 
     const { message, originalMessage, sessionId, userId, conversationContext, hasLiveData }: ChatRequest = await req.json();
-
-    // BYPASS ALL CONDITIONS - SEARCH FOR EVERY MESSAGE
-    console.log('🧪 TESTING MODE: Bypassing all conditions, searching for:', message);
-    
-    let searchContext = '';
-    try {
-      searchContext = await performWebSearch(message);
-      console.log('✅ Search completed successfully');
-    } catch (searchError) {
-      console.error('❌ Search failed:', searchError);
-      searchContext = '';
-    }
 
     // Get user's trading data
     const { data: sessions, error: sessionsError } = await supabaseClient
@@ -166,23 +131,46 @@ Deno.serve(async (req) => {
     const totalTrades = trades?.length || 0;
     const winRate = totalTrades ? (winningTrades / totalTrades) * 100 : 0;
 
-    // Create system prompt with search context
-    const systemPrompt = `You are Sydney, a friendly AI trading assistant with complete internet access.
+    let finalPrompt = '';
+    let searchPerformed = false;
+
+    // Check if real-time search is needed
+    if (needsRealTimeSearch(message)) {
+      console.log('🌐 Real-time search triggered for:', message);
+      try {
+        const searchResults = await performWebSearch(message);
+        searchPerformed = true;
+        
+        finalPrompt = `You are Sydney, a helpful AI trading assistant with access to real-time information.
+
+${searchResults}
+
+USER QUESTION: ${message}
+
+User Trading Stats: ${totalTrades} trades, ${winRate.toFixed(1)}% win rate, $${totalProfit.toFixed(2)} total P/L
+
+Use the search results above to provide an accurate, up-to-date response. Incorporate the real-time data naturally into your answer. Always mention when you're using current information.`;
+
+      } catch (searchError) {
+        console.error('🚫 Search failed, falling back to regular chat:', searchError);
+        searchPerformed = false;
+      }
+    }
+
+    // If no search was performed or search failed, use regular prompt
+    if (!searchPerformed) {
+      finalPrompt = `You are Sydney, a friendly AI trading assistant for Laxmi Chit Fund's trading analytics platform.
 
 User Stats: ${totalTrades} trades, ${winRate.toFixed(1)}% win rate, $${totalProfit.toFixed(2)} total P/L
 
-${searchContext ? `
-LIVE INTERNET DATA:
-${searchContext}
-
-Use this real-time information to answer the user's question: "${message}"
-` : ''}
+${conversationContext ? `Recent conversation:\n${conversationContext}\n\n` : ''}
 
 User Question: ${message}
 
-Respond naturally and helpfully. If you have live data, use it to provide current, accurate information.`;
+Respond naturally and helpfully about trading, markets, or general conversation.`;
+    }
 
-    console.log('🤖 Sending to Gemini with search context length:', searchContext.length);
+    console.log('🤖 Sending to Gemini, search performed:', searchPerformed);
 
     // Use Gemini API
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
@@ -196,7 +184,7 @@ Respond naturally and helpfully. If you have live data, use it to provide curren
           {
             parts: [
               {
-                text: systemPrompt
+                text: finalPrompt
               }
             ]
           }
@@ -224,10 +212,9 @@ Respond naturally and helpfully. If you have live data, use it to provide curren
         message: aiMessage,
         usage: aiData.usageMetadata,
         debugInfo: {
-          searchPerformed: true,
-          searchContextLength: searchContext.length,
-          apiKeyFound: !!Deno.env.get('SERPER_API_KEY'),
-          query: message
+          searchPerformed,
+          query: message,
+          searchTriggered: needsRealTimeSearch(message)
         }
       }),
       {
