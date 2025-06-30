@@ -11,7 +11,8 @@ import {
   Sparkles,
   TrendingUp,
   TrendingDown,
-  Clock
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { Trade, ExtractedTradeData } from '../../types';
 import { enhancedAiService } from '../../services/enhancedAiService';
@@ -89,6 +90,14 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
   const extractTradeData = async () => {
     if (!preview) return;
 
+    // Check if quota is available before attempting extraction
+    if (!enhancedAiService.isQuotaAvailable()) {
+      setExtractionStatus('quota_exceeded');
+      setError('AI analysis quota exceeded for today. The service will reset tomorrow. Please enter your trade data manually for now.');
+      toast.error('AI quota exceeded for today. Try again tomorrow!');
+      return;
+    }
+
     setIsExtracting(true);
     setExtractionStatus('idle');
 
@@ -144,10 +153,10 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
     } catch (error: any) {
       console.error('Extraction error:', error);
       
-      if (error.message?.includes('quota') || error.message?.includes('429')) {
+      if (error.message?.includes('quota') || error.message?.includes('exceeded') || error.message?.includes('429')) {
         setExtractionStatus('quota_exceeded');
-        setError('AI analysis is temporarily unavailable due to high demand. Please try again in a few minutes or enter data manually.');
-        toast.error('AI service is busy. Try again in a few minutes!');
+        setError('AI analysis quota exceeded for today. The service will reset tomorrow. Please enter your trade data manually for now.');
+        toast.error('AI quota exceeded for today. Try again tomorrow!');
       } else {
         setExtractionStatus('error');
         setError('Failed to extract trade data. Please try again or enter data manually.');
@@ -159,15 +168,15 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
   };
 
   const retryExtraction = async () => {
-    if (retryCount >= 3) {
-      toast.error('Maximum retry attempts reached. Please try again later.');
+    if (retryCount >= 2) { // Reduced max retries to conserve quota
+      toast.error('Maximum retry attempts reached. Please try again tomorrow.');
       return;
     }
     
     setRetryCount(prev => prev + 1);
     
-    // Wait before retrying (exponential backoff)
-    const delay = Math.pow(2, retryCount) * 1000;
+    // Wait before retrying (longer delay to respect quota limits)
+    const delay = Math.pow(3, retryCount) * 1000; // Exponential backoff with base 3
     toast.loading(`Retrying in ${delay / 1000} seconds...`, { duration: delay });
     
     setTimeout(() => {
@@ -337,6 +346,10 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
     }
   };
 
+  // Check if quota is available for display
+  const isQuotaAvailable = enhancedAiService.isQuotaAvailable();
+  const quotaResetTime = enhancedAiService.getQuotaResetTime();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -350,21 +363,55 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
         </h3>
       </div>
 
+      {/* Quota Status Warning */}
+      {!isQuotaAvailable && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="mb-6 bg-yellow-900/20 border border-yellow-700/50 rounded-lg p-4"
+        >
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+            <div className="text-sm text-yellow-200">
+              <p className="font-medium">AI Analysis Quota Exceeded</p>
+              <p className="text-yellow-300 mt-1">
+                The daily AI analysis limit has been reached. The service will reset tomorrow.
+                {quotaResetTime && (
+                  <span className="block mt-1">
+                    Reset time: {quotaResetTime.toLocaleDateString()} at midnight
+                  </span>
+                )}
+              </p>
+              <p className="text-yellow-300 mt-2">
+                You can still add trades manually using the form below! 📝
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Image Upload Section */}
       <div className="mb-6">
         <h4 className="text-md font-medium text-white mb-3 flex items-center">
           <Sparkles className="w-4 h-4 mr-2 text-purple-400" />
           AI Trade Extraction
+          {!isQuotaAvailable && (
+            <span className="ml-2 px-2 py-1 text-xs bg-yellow-600 text-yellow-100 rounded-full">
+              Quota Exceeded
+            </span>
+          )}
         </h4>
         
         <motion.div
-          className={`relative border-2 border-dashed rounded-lg transition-all duration-200 ${getExtractionStatusColor()}`}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.99 }}
+          className={`relative border-2 border-dashed rounded-lg transition-all duration-200 ${getExtractionStatusColor()} ${
+            !isQuotaAvailable ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+          onDragEnter={isQuotaAvailable ? handleDragEnter : undefined}
+          onDragLeave={isQuotaAvailable ? handleDragLeave : undefined}
+          onDragOver={isQuotaAvailable ? handleDragOver : undefined}
+          onDrop={isQuotaAvailable ? handleDrop : undefined}
+          whileHover={isQuotaAvailable ? { scale: 1.01 } : {}}
+          whileTap={isQuotaAvailable ? { scale: 0.99 } : {}}
         >
           <input
             ref={fileInputRef}
@@ -373,6 +420,7 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
             onChange={handleFileInput}
             className="hidden"
             id="cryptoTradeImageUpload"
+            disabled={!isQuotaAvailable}
           />
 
           <AnimatePresence mode="wait">
@@ -417,7 +465,7 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
                   </div>
                 </div>
                 
-                {!isExtracting && extractionStatus === 'idle' && (
+                {!isExtracting && extractionStatus === 'idle' && isQuotaAvailable && (
                   <motion.button
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -439,26 +487,16 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
                       <div className="flex items-start space-x-2">
                         <Clock className="w-4 h-4 text-yellow-400 mt-0.5" />
                         <div className="text-sm text-yellow-200">
-                          <p className="font-medium">AI Service Busy</p>
-                          <p className="text-yellow-300 mt-1">High demand detected. You can:</p>
+                          <p className="font-medium">Daily Quota Exceeded</p>
+                          <p className="text-yellow-300 mt-1">The AI analysis limit has been reached for today. Options:</p>
                           <ul className="list-disc list-inside mt-1 space-y-1 text-yellow-300">
-                            <li>Wait a few minutes and try again</li>
+                            <li>Wait until tomorrow for quota reset</li>
                             <li>Enter trade data manually below</li>
-                            <li>Try with a simpler screenshot</li>
+                            <li>Consider upgrading for higher limits</li>
                           </ul>
                         </div>
                       </div>
                     </div>
-                    
-                    {retryCount < 3 && (
-                      <button
-                        onClick={retryExtraction}
-                        className="w-full bg-yellow-600 text-white py-2 rounded-lg hover:bg-yellow-700 transition-all flex items-center justify-center"
-                      >
-                        <Clock className="w-4 h-4 mr-2" />
-                        Retry Extraction ({3 - retryCount} attempts left)
-                      </button>
-                    )}
                   </motion.div>
                 )}
                 
@@ -478,24 +516,27 @@ const CryptoTradeForm: React.FC<CryptoTradeFormProps> = ({ onAddTrade, sessionId
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="p-8 text-center cursor-pointer"
-                onClick={openFileDialog}
+                className={`p-8 text-center ${isQuotaAvailable ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                onClick={isQuotaAvailable ? openFileDialog : undefined}
               >
                 <motion.div
-                  animate={isDragOver ? { scale: 1.1 } : { scale: 1 }}
+                  animate={isDragOver && isQuotaAvailable ? { scale: 1.1 } : { scale: 1 }}
                   className="mb-4"
                 >
                   <Upload className={`w-12 h-12 mx-auto ${
-                    isDragOver ? 'text-purple-400' : 'text-slate-400'
+                    isDragOver && isQuotaAvailable ? 'text-purple-400' : 'text-slate-400'
                   }`} />
                 </motion.div>
                 
                 <h3 className="text-lg font-medium text-white mb-2">
-                  {isDragOver ? 'Drop your image here' : 'Upload Trading Screenshot'}
+                  {isDragOver && isQuotaAvailable ? 'Drop your image here' : 'Upload Trading Screenshot'}
                 </h3>
                 
                 <p className="text-slate-400 text-sm mb-4">
-                  Drag and drop, paste from clipboard, or click to browse
+                  {isQuotaAvailable 
+                    ? 'Drag and drop, paste from clipboard, or click to browse'
+                    : 'AI analysis quota exceeded - manual entry only'
+                  }
                 </p>
                 
                 <div className="text-xs text-slate-500">

@@ -16,31 +16,66 @@ export class EnhancedAIService {
   // Store conversation context in memory for each user
   private conversationContexts: Map<string, Array<{role: 'user' | 'assistant', content: string, timestamp: Date}>> = new Map();
 
+  // Track quota usage to prevent unnecessary API calls
+  private quotaExceeded = false;
+  private quotaResetTime: Date | null = null;
+
   private getRandomFallback(): string {
     return this.fallbackResponses[Math.floor(Math.random() * this.fallbackResponses.length)];
   }
 
+  private checkQuotaStatus(): boolean {
+    // If quota was exceeded, check if enough time has passed (reset daily)
+    if (this.quotaExceeded && this.quotaResetTime) {
+      const now = new Date();
+      const timeSinceReset = now.getTime() - this.quotaResetTime.getTime();
+      const hoursElapsed = timeSinceReset / (1000 * 60 * 60);
+      
+      // Reset quota status after 24 hours
+      if (hoursElapsed >= 24) {
+        this.quotaExceeded = false;
+        this.quotaResetTime = null;
+        return true;
+      }
+      return false;
+    }
+    return !this.quotaExceeded;
+  }
+
+  private markQuotaExceeded(): void {
+    this.quotaExceeded = true;
+    this.quotaResetTime = new Date();
+  }
+
   private async retryWithBackoff<T>(
     operation: () => Promise<T>,
-    maxRetries: number = 3,
-    baseDelay: number = 1000
+    maxRetries: number = 2, // Reduced retries to conserve quota
+    baseDelay: number = 2000 // Increased base delay
   ): Promise<T> {
+    // Check quota status before attempting
+    if (!this.checkQuotaStatus()) {
+      throw new Error('AI analysis quota exceeded. Please try again tomorrow or enter data manually.');
+    }
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await operation();
       } catch (error: any) {
+        console.error(`Attempt ${attempt} failed:`, error);
+        
+        // Check if it's a quota error
+        if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('exceeded')) {
+          this.markQuotaExceeded();
+          throw new Error('AI analysis quota exceeded for today. The service will reset tomorrow. Please enter your trade data manually for now.');
+        }
+        
         if (attempt === maxRetries) {
           throw error;
         }
         
-        // Check if it's a quota error
-        if (error.message?.includes('429') || error.message?.includes('quota')) {
-          const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000;
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-        
-        throw error; // Re-throw non-quota errors immediately
+        // Only retry for non-quota errors
+        const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     throw new Error('Max retries exceeded');
@@ -216,6 +251,11 @@ Remember this context and refer to it naturally in your responses. Build upon pr
   }
 
   async analyzeScreenshot(imageFile: File): Promise<ExtractedTradeData> {
+    // Check quota status before attempting analysis
+    if (!this.checkQuotaStatus()) {
+      throw new Error('AI analysis quota exceeded for today. The service will reset tomorrow. Please enter your trade data manually for now.');
+    }
+
     try {
       // Convert file to base64
       const base64Data = await new Promise<string>((resolve) => {
@@ -339,9 +379,10 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
     } catch (error: any) {
       console.error('Screenshot analysis error:', error);
       
-      // Return a helpful fallback response for quota errors
-      if (error.message?.includes('429') || error.message?.includes('quota')) {
-        throw new Error('AI analysis is temporarily unavailable due to high demand. Please try again in a few minutes, or enter your trade data manually.');
+      // Handle quota errors specifically
+      if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('exceeded')) {
+        this.markQuotaExceeded();
+        throw new Error('AI analysis quota exceeded for today. The service will reset tomorrow. Please enter your trade data manually for now.');
       }
       
       throw new Error('Failed to analyze screenshot. Please ensure the image shows clear trading information.');
@@ -494,6 +535,11 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
   }
 
   async processMessage(message: string, userId: string): Promise<string> {
+    // Check quota status before processing
+    if (!this.checkQuotaStatus()) {
+      return "I'm currently at my daily usage limit for AI responses. The service will reset tomorrow! In the meantime, you can still add trades manually and use all other features. 🤖✨";
+    }
+
     try {
       // Load conversation context from database if not already loaded
       if (!this.conversationContexts.has(userId)) {
@@ -616,9 +662,10 @@ Respond naturally and engagingly, using the conversation context to provide a co
     } catch (error: any) {
       console.error('AI message processing error:', error);
       
-      // Return helpful fallback for quota errors
-      if (error.message?.includes('429') || error.message?.includes('quota')) {
-        return this.getRandomFallback();
+      // Handle quota errors specifically
+      if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('exceeded')) {
+        this.markQuotaExceeded();
+        return "I've reached my daily chat limit! 😅 The service will reset tomorrow. You can still use all other features of the platform in the meantime! 🚀";
       }
       
       return "I'm having trouble processing your message right now. Please try again in a moment! 🤖";
@@ -696,6 +743,11 @@ Respond naturally and engagingly, using the conversation context to provide a co
    * Handles different column layout compared to forex trading tables
    */
   async analyzeCryptoScreenshot(imageFile: File): Promise<ExtractedTradeData> {
+    // Check quota status before attempting analysis
+    if (!this.checkQuotaStatus()) {
+      throw new Error('AI analysis quota exceeded for today. The service will reset tomorrow. Please enter your trade data manually for now.');
+    }
+
     try {
       // Convert file to base64
       const base64Data = await new Promise<string>((resolve) => {
@@ -818,9 +870,10 @@ MANDATORY: Extract ALL visible numeric values and times. Do NOT return null for 
     } catch (error: any) {
       console.error('Crypto screenshot analysis error:', error);
       
-      // Return a helpful fallback response for quota errors
-      if (error.message?.includes('429') || error.message?.includes('quota')) {
-        throw new Error('AI analysis is temporarily unavailable due to high demand. Please try again in a few minutes, or enter your trade data manually.');
+      // Handle quota errors specifically
+      if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('exceeded')) {
+        this.markQuotaExceeded();
+        throw new Error('AI analysis quota exceeded for today. The service will reset tomorrow. Please enter your trade data manually for now.');
       }
       
       throw new Error('Failed to analyze crypto screenshot. Please ensure the image shows clear trading information.');
@@ -854,6 +907,16 @@ MANDATORY: Extract ALL visible numeric values and times. Do NOT return null for 
     };
 
     return cleanData;
+  }
+
+  // Public method to check if quota is available
+  public isQuotaAvailable(): boolean {
+    return this.checkQuotaStatus();
+  }
+
+  // Public method to get quota reset time
+  public getQuotaResetTime(): Date | null {
+    return this.quotaResetTime;
   }
 }
 
