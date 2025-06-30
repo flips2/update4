@@ -5,7 +5,7 @@ import { ExtractedTradeData, ChatMessage } from '../types';
 const genAI = new GoogleGenerativeAI('AIzaSyDQVkAyAqPuonnplLxqEhhGyW_FqjteaVw');
 
 export class EnhancedAIService {
-  private model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Switch to Flash model for better quota
+  private model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite-preview-06-17" }); // Updated to new model for better quota and performance
   private fallbackResponses = [
     "I'm experiencing high demand right now. Let me help you with your trading analysis in a moment! 📊",
     "My systems are busy processing other requests. Meanwhile, feel free to add your trades manually! 💪",
