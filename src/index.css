@@ -99,6 +99,88 @@
   box-shadow: 0 0 12px rgba(147, 51, 234, 0.6);
 }
 
+/* Main Site Enhanced Scrollbar - Only visible on right edge hover */
+.main-site-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.4s ease;
+}
+
+/* Show scrollbar only when hovering near the right edge */
+.main-site-scrollbar:hover {
+  scrollbar-color: rgba(59, 130, 246, 0.7) rgba(15, 23, 42, 0.4);
+}
+
+.main-site-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.main-site-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 5px;
+  transition: all 0.4s ease;
+}
+
+.main-site-scrollbar:hover::-webkit-scrollbar-track {
+  background: linear-gradient(to bottom, rgba(15, 23, 42, 0.4), rgba(30, 41, 59, 0.4));
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.3);
+}
+
+.main-site-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  transition: all 0.4s ease;
+}
+
+.main-site-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(147, 51, 234, 0.8));
+  border: 2px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 
+    0 0 15px rgba(59, 130, 246, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.main-site-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 1), rgba(147, 51, 234, 1));
+  border: 2px solid rgba(59, 130, 246, 0.4);
+  box-shadow: 
+    0 0 20px rgba(59, 130, 246, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transform: scaleY(1.1);
+}
+
+/* Scrollbar corner styling */
+.main-site-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.main-site-scrollbar:hover::-webkit-scrollbar-corner {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+/* Right edge hover detection zone */
+.main-site-scrollbar {
+  position: relative;
+}
+
+.main-site-scrollbar::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 20px;
+  height: 100vh;
+  z-index: 9999;
+  pointer-events: none;
+  background: transparent;
+  transition: background 0.3s ease;
+}
+
+.main-site-scrollbar:hover::after {
+  background: linear-gradient(to left, rgba(59, 130, 246, 0.1), transparent);
+}
+
 /* Remove number input spinners/arrows */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {

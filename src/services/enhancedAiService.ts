@@ -43,55 +43,80 @@ export class EnhancedAIService {
     throw new Error('Max retries exceeded');
   }
 
-  private normalizePosition(value: any): string | undefined {
-    if (!value || value === null || value === undefined) return undefined;
+  // Get current date and time information for Sydney
+  private getCurrentDateTimeInfo(): string {
+    const now = new Date();
     
-    // Convert to string and clean up
-    const positionStr = value.toString().trim().toLowerCase();
-    
-    // Map known variations to database-accepted values
-    if (positionStr.includes('closed') || positionStr === 'all closed' || positionStr === 'close') {
-      return 'Closed';
-    }
-    
-    if (positionStr.includes('open') || positionStr === 'opened') {
-      return 'Open';
-    }
-    
-    // If it's already in the correct format, return as is
-    if (positionStr === 'open') return 'Open';
-    if (positionStr === 'closed') return 'Closed';
-    
-    // If we can't recognize the value, return undefined to let the database handle it
-    return undefined;
+    // Get comprehensive date/time information
+    const dateInfo = {
+      fullDate: now.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      }),
+      time: now.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      dayOfWeek: now.toLocaleDateString('en-US', { weekday: 'long' }),
+      month: now.toLocaleDateString('en-US', { month: 'long' }),
+      year: now.getFullYear(),
+      hour: now.getHours(),
+      minute: now.getMinutes(),
+      isWeekend: now.getDay() === 0 || now.getDay() === 6,
+      isBusinessHours: now.getHours() >= 9 && now.getHours() <= 17,
+      season: this.getCurrentSeason(now),
+      marketStatus: this.getMarketStatus(now)
+    };
+
+    return `CURRENT DATE & TIME INFORMATION:
+📅 Today is: ${dateInfo.fullDate}
+🕐 Current time: ${dateInfo.time} (${dateInfo.timezone})
+📊 Market status: ${dateInfo.marketStatus}
+🌍 Season: ${dateInfo.season}
+💼 Business hours: ${dateInfo.isBusinessHours ? 'Yes' : 'No'}
+🎯 Weekend: ${dateInfo.isWeekend ? 'Yes' : 'No'}
+
+Use this real-time information naturally in your responses when relevant (time-based greetings, market hours, weekend references, etc.).`;
   }
 
-  private normalizeReason(value: any): string | undefined {
-    if (!value || value === null || value === undefined) return undefined;
+  private getCurrentSeason(date: Date): string {
+    const month = date.getMonth() + 1; // getMonth() returns 0-11
+    const day = date.getDate();
     
-    // Convert to string and clean up
-    const reasonStr = value.toString().trim().toLowerCase();
+    if ((month === 12 && day >= 21) || month === 1 || month === 2 || (month === 3 && day < 20)) {
+      return 'Winter ❄️';
+    } else if ((month === 3 && day >= 20) || month === 4 || month === 5 || (month === 6 && day < 21)) {
+      return 'Spring 🌸';
+    } else if ((month === 6 && day >= 21) || month === 7 || month === 8 || (month === 9 && day < 23)) {
+      return 'Summer ☀️';
+    } else {
+      return 'Autumn 🍂';
+    }
+  }
+
+  private getMarketStatus(date: Date): string {
+    const hour = date.getHours();
+    const day = date.getDay(); // 0 = Sunday, 6 = Saturday
     
-    // Map known variations to database-accepted values
-    if (reasonStr.includes('tp') || reasonStr.includes('take profit') || reasonStr.includes('takeprofit')) {
-      return 'TP';
+    // Weekend
+    if (day === 0 || day === 6) {
+      return 'Markets Closed (Weekend) 🏖️';
     }
     
-    if (reasonStr.includes('sl') || reasonStr.includes('stop loss') || reasonStr.includes('stoploss')) {
-      return 'SL';
+    // Weekday market hours (approximate US market hours)
+    if (hour >= 9 && hour < 16) {
+      return 'Markets Open 📈';
+    } else if (hour >= 16 && hour < 20) {
+      return 'After Hours Trading 🌆';
+    } else if (hour >= 4 && hour < 9) {
+      return 'Pre-Market Trading 🌅';
+    } else {
+      return 'Markets Closed 🌙';
     }
-    
-    if (reasonStr.includes('early') || reasonStr.includes('manual') || reasonStr.includes('close')) {
-      return 'Early Close';
-    }
-    
-    // If it's already in the correct format, return as is
-    if (['TP', 'SL', 'Early Close', 'Other'].includes(reasonStr.toUpperCase())) {
-      return reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1).toLowerCase();
-    }
-    
-    // Default to 'Other' for any unrecognized reason to prevent constraint violations
-    return 'Other';
   }
 
   async analyzeScreenshot(imageFile: File): Promise<ExtractedTradeData> {
@@ -247,6 +272,57 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
     return cleanData;
   }
 
+  private normalizePosition(value: any): string | undefined {
+    if (!value || value === null || value === undefined) return undefined;
+    
+    // Convert to string and clean up
+    const positionStr = value.toString().trim().toLowerCase();
+    
+    // Map known variations to database-accepted values
+    if (positionStr.includes('closed') || positionStr === 'all closed' || positionStr === 'close') {
+      return 'Closed';
+    }
+    
+    if (positionStr.includes('open') || positionStr === 'opened') {
+      return 'Open';
+    }
+    
+    // If it's already in the correct format, return as is
+    if (positionStr === 'open') return 'Open';
+    if (positionStr === 'closed') return 'Closed';
+    
+    // If we can't recognize the value, return undefined to let the database handle it
+    return undefined;
+  }
+
+  private normalizeReason(value: any): string | undefined {
+    if (!value || value === null || value === undefined) return undefined;
+    
+    // Convert to string and clean up
+    const reasonStr = value.toString().trim().toLowerCase();
+    
+    // Map known variations to database-accepted values
+    if (reasonStr.includes('tp') || reasonStr.includes('take profit') || reasonStr.includes('takeprofit')) {
+      return 'TP';
+    }
+    
+    if (reasonStr.includes('sl') || reasonStr.includes('stop loss') || reasonStr.includes('stoploss')) {
+      return 'SL';
+    }
+    
+    if (reasonStr.includes('early') || reasonStr.includes('manual') || reasonStr.includes('close')) {
+      return 'Early Close';
+    }
+    
+    // If it's already in the correct format, return as is
+    if (['TP', 'SL', 'Early Close', 'Other'].includes(reasonStr.toUpperCase())) {
+      return reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1).toLowerCase();
+    }
+    
+    // Default to 'Other' for any unrecognized reason to prevent constraint violations
+    return 'Other';
+  }
+
   private parseNumber(value: any): number | undefined {
     if (value === null || value === undefined || value === '') return undefined;
     
@@ -344,8 +420,13 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
       const totalTrades = trades?.length || 0;
       const winRate = totalTrades ? (winningTrades / totalTrades) * 100 : 0;
 
-      // Enhanced system prompt for natural conversations
+      // Get real-time date/time information
+      const dateTimeInfo = this.getCurrentDateTimeInfo();
+
+      // Enhanced system prompt for natural conversations with real-time awareness
       const systemPrompt = `You are Sydney, a friendly and conversational AI assistant specializing in trading analytics. You're designed to be personable, engaging, and capable of both trading discussions AND general conversations.
+
+${dateTimeInfo}
 
 PERSONALITY TRAITS:
 - Warm, friendly, and approachable like a knowledgeable friend
@@ -357,6 +438,7 @@ PERSONALITY TRAITS:
 - Ask follow-up questions to keep conversations flowing
 - Share insights, opinions, and even personal preferences when appropriate
 - Be conversational like ChatGPT - natural, flowing, and engaging
+- Use real-time date/time information naturally in responses
 
 CONVERSATION CAPABILITIES:
 ✅ Trading analysis and advice
@@ -368,6 +450,7 @@ CONVERSATION CAPABILITIES:
 ✅ Travel, culture, and lifestyle discussions
 ✅ Problem-solving and brainstorming
 ✅ Emotional support and motivation
+✅ Time-aware responses (greetings based on actual time, market hours, etc.)
 
 USER'S TRADING CONTEXT (use when relevant):
 - Total Trades: ${totalTrades}
@@ -386,13 +469,13 @@ RESPONSE GUIDELINES:
 - Keep responses engaging and varied - avoid being repetitive
 - Show personality and be memorable
 - Be helpful across ALL topics, not just trading
+- Use the current date/time information naturally when relevant
+- Give time-appropriate greetings and responses
+- Reference market hours, weekends, seasons naturally when relevant
 
-CURRENT CONTEXT:
-Date: ${new Date().toLocaleDateString()}
-Time: ${new Date().toLocaleTimeString()}
 User Message: "${message}"
 
-Respond naturally and engagingly to whatever the user wants to discuss. If it's trading-related, incorporate their data. If it's general conversation, be a great conversational partner!`;
+Respond naturally and engagingly to whatever the user wants to discuss. Use the real-time date/time information when appropriate. If it's trading-related, incorporate their data. If it's general conversation, be a great conversational partner!`;
 
       const result = await this.retryWithBackoff(async () => {
         return await this.model.generateContent(systemPrompt);
