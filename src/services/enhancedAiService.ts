@@ -43,6 +43,57 @@ export class EnhancedAIService {
     throw new Error('Max retries exceeded');
   }
 
+  private normalizePosition(value: any): string | undefined {
+    if (!value || value === null || value === undefined) return undefined;
+    
+    // Convert to string and clean up
+    const positionStr = value.toString().trim().toLowerCase();
+    
+    // Map known variations to database-accepted values
+    if (positionStr.includes('closed') || positionStr === 'all closed' || positionStr === 'close') {
+      return 'Closed';
+    }
+    
+    if (positionStr.includes('open') || positionStr === 'opened') {
+      return 'Open';
+    }
+    
+    // If it's already in the correct format, return as is
+    if (positionStr === 'open') return 'Open';
+    if (positionStr === 'closed') return 'Closed';
+    
+    // If we can't recognize the value, return undefined to let the database handle it
+    return undefined;
+  }
+
+  private normalizeReason(value: any): string | undefined {
+    if (!value || value === null || value === undefined) return undefined;
+    
+    // Convert to string and clean up
+    const reasonStr = value.toString().trim().toLowerCase();
+    
+    // Map known variations to database-accepted values
+    if (reasonStr.includes('tp') || reasonStr.includes('take profit') || reasonStr.includes('takeprofit')) {
+      return 'TP';
+    }
+    
+    if (reasonStr.includes('sl') || reasonStr.includes('stop loss') || reasonStr.includes('stoploss')) {
+      return 'SL';
+    }
+    
+    if (reasonStr.includes('early') || reasonStr.includes('manual') || reasonStr.includes('close')) {
+      return 'Early Close';
+    }
+    
+    // If it's already in the correct format, return as is
+    if (['TP', 'SL', 'Early Close', 'Other'].includes(reasonStr.toUpperCase())) {
+      return reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1).toLowerCase();
+    }
+    
+    // Default to 'Other' for any unrecognized reason to prevent constraint violations
+    return 'Other';
+  }
+
   async analyzeScreenshot(imageFile: File): Promise<ExtractedTradeData> {
     try {
       // Convert file to base64
@@ -174,57 +225,6 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
       
       throw new Error('Failed to analyze screenshot. Please ensure the image shows clear trading information.');
     }
-  }
-
-  private normalizePosition(value: any): string | undefined {
-    if (!value || value === null || value === undefined) return undefined;
-    
-    // Convert to string and clean up
-    const positionStr = value.toString().trim().toLowerCase();
-    
-    // Map known variations to database-accepted values
-    if (positionStr.includes('closed') || positionStr === 'all closed' || positionStr === 'close') {
-      return 'Closed';
-    }
-    
-    if (positionStr.includes('open') || positionStr === 'opened') {
-      return 'Open';
-    }
-    
-    // If it's already in the correct format, return as is
-    if (positionStr === 'open') return 'Open';
-    if (positionStr === 'closed') return 'Closed';
-    
-    // If we can't recognize the value, return undefined to let the database handle it
-    return undefined;
-  }
-
-  private normalizeReason(value: any): string | undefined {
-    if (!value || value === null || value === undefined) return undefined;
-    
-    // Convert to string and clean up
-    const reasonStr = value.toString().trim().toLowerCase();
-    
-    // Map known variations to database-accepted values
-    if (reasonStr.includes('tp') || reasonStr.includes('take profit') || reasonStr.includes('takeprofit')) {
-      return 'TP';
-    }
-    
-    if (reasonStr.includes('sl') || reasonStr.includes('stop loss') || reasonStr.includes('stoploss')) {
-      return 'SL';
-    }
-    
-    if (reasonStr.includes('early') || reasonStr.includes('manual') || reasonStr.includes('close')) {
-      return 'Early Close';
-    }
-    
-    // If it's already in the correct format, return as is
-    if (['TP', 'SL', 'Early Close', 'Other'].includes(reasonStr.toUpperCase())) {
-      return reasonStr.charAt(0).toUpperCase() + reasonStr.slice(1).toLowerCase();
-    }
-    
-    // Default to 'Other' for any unrecognized reason to prevent constraint violations
-    return 'Other';
   }
 
   private validateAndCleanExtractedData(data: any): ExtractedTradeData {
