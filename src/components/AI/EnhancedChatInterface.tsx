@@ -26,6 +26,52 @@ const SydneyAvatar = ({ className = "w-4 h-4" }: { className?: string }) => (
   </div>
 );
 
+// Typewriter Effect Component
+const TypewriterText: React.FC<{ 
+  text: string; 
+  speed?: number; 
+  onComplete?: () => void;
+  className?: string;
+}> = ({ text, speed = 30, onComplete, className = "" }) => {
+  const [displayedText, setDisplayedText] = useState('');
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isComplete, setIsComplete] = useState(false);
+
+  useEffect(() => {
+    if (currentIndex < text.length) {
+      const timer = setTimeout(() => {
+        setDisplayedText(prev => prev + text[currentIndex]);
+        setCurrentIndex(prev => prev + 1);
+      }, speed);
+
+      return () => clearTimeout(timer);
+    } else if (!isComplete) {
+      setIsComplete(true);
+      onComplete?.();
+    }
+  }, [currentIndex, text, speed, onComplete, isComplete]);
+
+  // Reset when text changes
+  useEffect(() => {
+    setDisplayedText('');
+    setCurrentIndex(0);
+    setIsComplete(false);
+  }, [text]);
+
+  return (
+    <span className={className}>
+      {displayedText}
+      {!isComplete && (
+        <motion.span
+          animate={{ opacity: [1, 0] }}
+          transition={{ duration: 0.8, repeat: Infinity, repeatType: "reverse" }}
+          className="inline-block w-0.5 h-4 bg-current ml-0.5"
+        />
+      )}
+    </span>
+  );
+};
+
 interface EnhancedChatInterfaceProps {
   currentSessionId?: string;
 }
@@ -39,6 +85,7 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
   const [isLoading, setIsLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'limited' | 'offline'>('connected');
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -97,17 +144,27 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
     setInputMessage('');
     setIsLoading(true);
 
+    // Create placeholder AI message for streaming
+    const aiMessageId = (Date.now() + 1).toString();
+    const placeholderAiMessage = {
+      id: aiMessageId,
+      role: 'ai' as const,
+      content: '',
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, placeholderAiMessage]);
+    setStreamingMessageId(aiMessageId);
+
     try {
       const aiResponse = await enhancedAiService.processMessage(currentInput, user.id);
 
-      const assistantMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'ai' as const,
-        content: aiResponse,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      // Update the placeholder message with the actual response
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMessageId 
+          ? { ...msg, content: aiResponse }
+          : msg
+      ));
       
       // Save to database (don't block UI if this fails)
       try {
@@ -129,17 +186,22 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
         setConnectionStatus('offline');
       }
       
-      const errorResponse = {
-        id: (Date.now() + 1).toString(),
-        role: 'ai' as const,
-        content: errorMessage,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorResponse]);
+      // Update the placeholder message with error
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMessageId 
+          ? { ...msg, content: errorMessage }
+          : msg
+      ));
       
       toast.error('Sydney is temporarily busy. Try again in a moment!');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleTypewriterComplete = (messageId: string) => {
+    if (streamingMessageId === messageId) {
+      setStreamingMessageId(null);
     }
   };
 
@@ -152,6 +214,7 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
 
   const clearChat = () => {
     setMessages([]);
+    setStreamingMessageId(null);
   };
 
   const getStatusColor = () => {
@@ -310,7 +373,16 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
                         ? 'bg-blue-600 text-white'
                         : 'bg-slate-700 text-slate-100'
                     }`}>
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      {message.role === 'ai' && streamingMessageId === message.id ? (
+                        <TypewriterText
+                          text={message.content}
+                          speed={25}
+                          onComplete={() => handleTypewriterComplete(message.id)}
+                          className="text-sm whitespace-pre-wrap"
+                        />
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      )}
                       <p className="text-xs opacity-70 mt-1">
                         {message.timestamp.toLocaleTimeString()}
                       </p>
