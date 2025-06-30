@@ -36,67 +36,39 @@ interface TradingSession {
   updated_at: string;
 }
 
-interface SearchResult {
-  title: string;
-  snippet: string;
-  link: string;
-}
+// Log environment variable at the top
+console.log('🔑 SERPER_API_KEY is:', Deno.env.get('SERPER_API_KEY'));
 
-// Simplified function - search for almost everything except basic greetings
-function needsRealTimeSearch(message: string): boolean {
-  const lowerMessage = message.toLowerCase().trim();
-  
-  // Only skip search for very basic greetings
-  const skipPatterns = [
-    /^(hi|hello|hey)$/,
-    /^(thanks|thank you|ok|okay)$/,
-    /^(yes|no)$/
-  ];
-  
-  const shouldSkip = skipPatterns.some(pattern => pattern.test(lowerMessage));
-  
-  console.log(`🔍 Search decision for "${message}": ${shouldSkip ? 'SKIP' : 'SEARCH'}`);
-  return !shouldSkip;
-}
-
-// Enhanced web search function with comprehensive error handling
+// Enhanced web search function with comprehensive debugging
 async function performWebSearch(query: string): Promise<string> {
-  console.log('🌐 Starting web search for:', query);
+  console.log('🔍 About to call Serper.dev with query:', query);
   
   try {
-    // Check environment variable first
+    // Get API key with fallback
     let serperApiKey = Deno.env.get('SERPER_API_KEY');
-    console.log('🔑 SERPER_API_KEY from env:', serperApiKey ? 'Found' : 'Not found');
-    
-    // Use hardcoded key for debugging if env var not found
     if (!serperApiKey) {
       serperApiKey = 'd37d92d960bfa9381d3c6151a15779d9613c2706';
-      console.log('🔑 Using hardcoded API key for debugging');
+      console.log('🔑 Using hardcoded API key as fallback');
     }
-
-    // Optimize search query
-    let optimizedQuery = query;
-    
-    // Add current date for time-sensitive queries
-    if (query.toLowerCase().includes('today') || query.toLowerCase().includes('now') || query.toLowerCase().includes('current')) {
-      const currentDate = new Date().toISOString().split('T')[0];
-      optimizedQuery = `${query} ${currentDate}`;
-    }
-    
-    // Add market context for financial queries
-    if (query.toLowerCase().includes('price') || query.toLowerCase().includes('bitcoin') || query.toLowerCase().includes('stock')) {
-      optimizedQuery = `${query} latest market data`;
-    }
-
-    console.log('🔍 Optimized search query:', optimizedQuery);
 
     const requestBody = { 
-      q: optimizedQuery,
+      q: query,
       num: 5
     };
+
+    // Log the full request configuration
+    const config = {
+      method: 'POST',
+      url: 'https://google.serper.dev/search',
+      headers: {
+        'X-API-KEY': serperApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
+    };
     
-    console.log('📤 Sending request to Serper API...');
-    console.log('📤 Request body:', JSON.stringify(requestBody));
+    console.log('⚙️ Request config:', JSON.stringify(config, null, 2));
+    console.log('📤 Making request to Serper.dev...');
 
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',
@@ -107,63 +79,38 @@ async function performWebSearch(query: string): Promise<string> {
       body: JSON.stringify(requestBody),
     });
 
-    console.log('📥 Serper API response status:', response.status);
-    console.log('📥 Serper API response headers:', Object.fromEntries(response.headers.entries()));
+    console.log('📥 Response status:', response.status);
+    console.log('📥 Response headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Serper API error:', response.status, response.statusText);
-      console.error('❌ Error response body:', errorText);
-      return '';
+      console.error('❌ Serper.dev request failed - Status:', response.status);
+      console.error('❌ Error response:', errorText);
+      throw new Error(`Serper API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('📊 Serper API response data keys:', Object.keys(data));
-    console.log('📊 Number of organic results:', data.organic?.length || 0);
+    console.log('📊 Serper response data keys:', Object.keys(data));
+    console.log('📊 Number of results:', data.organic?.length || 0);
 
-    // Extract search results
-    const results: SearchResult[] = (data.organic || []).slice(0, 5).map((result: any) => ({
-      title: result.title || '',
-      snippet: result.snippet || '',
-      link: result.link || '',
-    }));
-
-    console.log('📋 Extracted results count:', results.length);
-
-    if (results.length === 0) {
-      console.log('⚠️ No search results found');
-      return '';
-    }
-
-    // Format comprehensive search context
-    let searchContext = `🌐 LIVE SEARCH RESULTS for "${query}":\n\n`;
+    // Format search results
+    const results = (data.organic || []).slice(0, 3);
+    let searchContext = `Search Results:\n\n`;
     
-    // Include knowledge graph if available
-    if (data.knowledgeGraph) {
-      searchContext += `📊 Quick Facts: ${data.knowledgeGraph.title || ''} - ${data.knowledgeGraph.description || ''}\n\n`;
-    }
-
-    // Include answer box if available
-    if (data.answerBox) {
-      searchContext += `💡 Direct Answer: ${data.answerBox.answer || data.answerBox.snippet || ''}\n\n`;
-    }
-    
-    searchContext += `📰 Latest Information:\n`;
-    results.forEach((result, index) => {
-      searchContext += `${index + 1}. **${result.title}**\n`;
-      searchContext += `   ${result.snippet}\n`;
-      searchContext += `   Source: ${result.link}\n\n`;
+    results.forEach((result: any, index: number) => {
+      searchContext += `${index + 1}. ${result.title}\n`;
+      searchContext += `${result.snippet}\n`;
+      searchContext += `${result.link}\n\n`;
     });
 
-    console.log('✅ Search context generated successfully, length:', searchContext.length);
-    console.log('📄 Search context preview:', searchContext.substring(0, 200) + '...');
-
+    console.log('📥 Serper.dev returned:', searchContext.substring(0, 200) + '...');
     return searchContext;
-  } catch (error) {
-    console.error('❌ Web search error:', error);
-    console.error('❌ Error details:', error.message);
-    console.error('❌ Error stack:', error.stack);
-    return '';
+
+  } catch (err) {
+    console.error('❌ Serper.dev request failed:', err);
+    console.error('❌ Error details:', err.message);
+    console.error('❌ Error stack:', err.stack);
+    throw err;
   }
 }
 
@@ -173,35 +120,23 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('🚀 AI Chat function started');
-    
-    // Log environment variable status
-    const serperKey = Deno.env.get('SERPER_API_KEY');
-    console.log('🔑 Environment check - SERPER_API_KEY:', serperKey ? 'Available' : 'Missing');
-
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     const { message, originalMessage, sessionId, userId, conversationContext, hasLiveData }: ChatRequest = await req.json();
-    console.log('📨 Received message:', message);
 
-    // TEMPORARILY BYPASS CONDITION FOR TESTING - ALWAYS SEARCH
-    console.log('🧪 TESTING MODE: Performing search for all messages');
+    // BYPASS ALL CONDITIONS - SEARCH FOR EVERY MESSAGE
+    console.log('🧪 TESTING MODE: Bypassing all conditions, searching for:', message);
     
     let searchContext = '';
-    let hasSearchData = false;
-
-    // Perform search for every message (testing mode)
-    console.log('🔍 Initiating web search...');
-    searchContext = await performWebSearch(message);
-    
-    if (searchContext) {
-      hasSearchData = true;
-      console.log('✅ Search successful - context length:', searchContext.length);
-    } else {
-      console.log('❌ Search failed or returned empty results');
+    try {
+      searchContext = await performWebSearch(message);
+      console.log('✅ Search completed successfully');
+    } catch (searchError) {
+      console.error('❌ Search failed:', searchError);
+      searchContext = '';
     }
 
     // Get user's trading data
@@ -225,55 +160,29 @@ Deno.serve(async (req) => {
       throw new Error('Failed to fetch trades');
     }
 
-    // Calculate trading stats
+    // Calculate basic stats for context
     const totalProfit = trades?.reduce((sum, trade) => sum + trade.profit_loss, 0) || 0;
     const winningTrades = trades?.filter(trade => trade.profit_loss > 0).length || 0;
-    const losingTrades = trades?.filter(trade => trade.profit_loss < 0).length || 0;
-    const winRate = trades?.length ? (winningTrades / trades.length) * 100 : 0;
+    const totalTrades = trades?.length || 0;
+    const winRate = totalTrades ? (winningTrades / totalTrades) * 100 : 0;
 
-    // Create enhanced system prompt with search results
-    const systemPrompt = `You are Sydney, an AI trading assistant with COMPLETE INTERNET ACCESS. You are helpful, friendly, conversational, and knowledgeable about trading, markets, geopolitics, and current events.
+    // Create system prompt with search context
+    const systemPrompt = `You are Sydney, a friendly AI trading assistant with complete internet access.
 
-PERSONALITY:
-- Be conversational and natural like ChatGPT
-- Use appropriate emojis to make responses engaging
-- Ask follow-up questions to keep conversations flowing
-- Be encouraging and supportive about trading journey
-- Handle trading topics, current events, geopolitics, markets, and general conversation
-- Show genuine interest in world events and trading progress
+User Stats: ${totalTrades} trades, ${winRate.toFixed(1)}% win rate, $${totalProfit.toFixed(2)} total P/L
 
-USER'S TRADING DATA:
-- Total Sessions: ${sessions?.length || 0}
-- Total Trades: ${trades?.length || 0}
-- Total P/L: $${totalProfit.toFixed(2)}
-- Win Rate: ${winRate.toFixed(1)}%
-
-${hasSearchData ? `
-🌐 LIVE INTERNET SEARCH RESULTS:
-I have access to real-time internet information for your question. Here are the latest search results:
-
+${searchContext ? `
+LIVE INTERNET DATA:
 ${searchContext}
 
-IMPORTANT: Use this live internet data as your primary source. This information is current and up-to-date. Analyze it, provide insights, and relate it to trading/markets when relevant.
+Use this real-time information to answer the user's question: "${message}"
 ` : ''}
 
-CAPABILITIES:
-- Real-time market data and analysis
-- Live geopolitical developments
-- Breaking news and current events
-- Economic data and central bank decisions
-- Cryptocurrency and stock market updates
-- Weather, sports, and general information
-- Company earnings and financial news
+User Question: ${message}
 
-USER QUESTION: "${message}"
+Respond naturally and helpfully. If you have live data, use it to provide current, accurate information.`;
 
-Provide a comprehensive, well-informed response using the live search data above. Connect current events to trading implications when relevant. Be analytical and insightful.
-
-Current date: ${new Date().toLocaleDateString()}
-Current time: ${new Date().toLocaleTimeString()}`;
-
-    console.log('🤖 Sending request to Gemini API...');
+    console.log('🤖 Sending to Gemini with search context length:', searchContext.length);
 
     // Use Gemini API
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
@@ -293,36 +202,32 @@ Current time: ${new Date().toLocaleTimeString()}`;
           }
         ],
         generationConfig: {
-          temperature: 0.7,
+          temperature: 0.8,
           topK: 40,
           topP: 0.95,
-          maxOutputTokens: 1500,
+          maxOutputTokens: 1000,
         }
       }),
     });
 
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
-      console.error('❌ Gemini API error:', errorText);
+      console.error('Gemini API error:', errorText);
       throw new Error('Gemini API request failed');
     }
 
     const aiData = await geminiResponse.json();
     const aiMessage = aiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not process your request.';
 
-    console.log('✅ AI response generated successfully');
-    console.log('📊 Response length:', aiMessage.length);
-
     return new Response(
       JSON.stringify({ 
         message: aiMessage,
         usage: aiData.usageMetadata,
-        hasLiveData: hasSearchData,
-        searchPerformed: hasSearchData,
         debugInfo: {
+          searchPerformed: true,
           searchContextLength: searchContext.length,
-          apiKeyAvailable: !!serperKey,
-          searchQuery: message
+          apiKeyFound: !!Deno.env.get('SERPER_API_KEY'),
+          query: message
         }
       }),
       {
@@ -331,7 +236,7 @@ Current time: ${new Date().toLocaleTimeString()}`;
     );
 
   } catch (error) {
-    console.error('❌ Error in AI chat function:', error);
+    console.error('Error in AI chat function:', error);
     return new Response(
       JSON.stringify({ 
         error: 'Failed to process chat request',
