@@ -321,8 +321,8 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
               </motion.div>
             )}
 
-            {/* Messages */}
-            <div className="flex-1 p-4 overflow-y-auto max-h-96 space-y-4">
+            {/* Messages with Enhanced Scrollbar */}
+            <div className="flex-1 p-4 overflow-y-auto max-h-96 space-y-4 sydney-chat-scrollbar">
               {loadingHistory && (
                 <div className="text-center text-slate-400 py-4">
                   <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
