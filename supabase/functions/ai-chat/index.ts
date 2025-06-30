@@ -36,59 +36,76 @@ interface TradingSession {
   updated_at: string;
 }
 
-// Web search function using native fetch() for Deno compatibility
-async function performWebSearch(query: string): Promise<string> {
-  console.log('🔍 Starting web search for:', query);
-  
-  try {
-    const response = await fetch('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: {
-        'X-API-KEY': 'd37d92d960bfa9381d3c6151a15779d9613c2706',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        q: query,
-        num: 5
-      })
-    });
-
-    console.log('📡 Serper response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Serper API error:', response.status, errorText);
-      throw new Error(`Serper API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('📊 Serper returned', data.organic?.length || 0, 'results');
-    
-    // Format results for Gemini
-    const results = data.organic?.slice(0, 5).map((result: any) => 
-      `Title: ${result.title}\nSnippet: ${result.snippet}\nURL: ${result.link}`
-    ).join('\n\n') || 'No results found';
-    
-    console.log('✅ Serper search successful, credits should be used');
-    return `LIVE SEARCH RESULTS:\n\n${results}`;
-    
-  } catch (error) {
-    console.error('❌ Web search failed:', error);
-    return 'Search unavailable';
-  }
+interface SearchResult {
+  title: string;
+  snippet: string;
+  link: string;
 }
 
-// Smart search detection
+// Function to detect if a message needs real-time search
 function needsRealTimeSearch(message: string): boolean {
-  const searchKeywords = [
-    'current', 'now', 'today', 'latest', 'recent', 'news',
-    'weather', 'price', 'bitcoin', 'crypto', 'stock',
-    'war', 'election', 'breaking', 'update', 'situation',
-    'who won', 'score', 'match', 'game', 'live'
+  const realTimeKeywords = [
+    'today', 'now', 'current', 'latest', 'recent', 'price', 'weather', 
+    'news', 'won', 'match', 'score', 'live', 'happening', 'update',
+    'right now', 'this moment', 'currently', 'breaking', 'just',
+    'what\'s', 'whats', 'how much', 'who won', 'what happened',
+    'bitcoin price', 'crypto price', 'stock price', 'market',
+    'temperature', 'forecast', 'rain', 'sunny', 'cloudy'
   ];
   
   const lowerMessage = message.toLowerCase();
-  return searchKeywords.some(keyword => lowerMessage.includes(keyword));
+  return realTimeKeywords.some(keyword => lowerMessage.includes(keyword));
+}
+
+// Function to perform web search using Serper.dev
+async function performWebSearch(query: string): Promise<string> {
+  try {
+    const serperApiKey = Deno.env.get('SERPER_API_KEY');
+    if (!serperApiKey) {
+      console.warn('SERPER_API_KEY not found, skipping web search');
+      return '';
+    }
+
+    const response = await fetch('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': serperApiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ q: query }),
+    });
+
+    if (!response.ok) {
+      console.error('Serper API error:', response.status, response.statusText);
+      return '';
+    }
+
+    const data = await response.json();
+    
+    // Extract top 3 results
+    const results: SearchResult[] = (data.organic || []).slice(0, 3).map((result: any) => ({
+      title: result.title || '',
+      snippet: result.snippet || '',
+      link: result.link || '',
+    }));
+
+    if (results.length === 0) {
+      return '';
+    }
+
+    // Format results into a context string
+    let searchContext = `🌐 LIVE SEARCH RESULTS for "${query}":\n\n`;
+    results.forEach((result, index) => {
+      searchContext += `${index + 1}. **${result.title}**\n`;
+      searchContext += `   ${result.snippet}\n`;
+      searchContext += `   Source: ${result.link}\n\n`;
+    });
+
+    return searchContext;
+  } catch (error) {
+    console.error('Web search error:', error);
+    return '';
+  }
 }
 
 Deno.serve(async (req) => {
@@ -103,6 +120,20 @@ Deno.serve(async (req) => {
     );
 
     const { message, originalMessage, sessionId, userId, conversationContext, hasLiveData }: ChatRequest = await req.json();
+
+    // Check if we need to perform a web search
+    let searchContext = '';
+    let enrichedMessage = message;
+    let hasSearchData = false;
+
+    if (needsRealTimeSearch(message)) {
+      console.log('Performing web search for:', message);
+      searchContext = await performWebSearch(message);
+      if (searchContext) {
+        hasSearchData = true;
+        enrichedMessage = `${message}\n\n${searchContext}`;
+      }
+    }
 
     // Get user's trading data
     const { data: sessions, error: sessionsError } = await supabaseClient
@@ -125,52 +156,99 @@ Deno.serve(async (req) => {
       throw new Error('Failed to fetch trades');
     }
 
-    // Calculate basic stats for context
+    // Prepare context for AI
+    const tradingContext = {
+      sessions: sessions || [],
+      trades: trades || [],
+      totalSessions: sessions?.length || 0,
+      totalTrades: trades?.length || 0,
+      currentDate: new Date().toISOString(),
+    };
+
+    // Calculate some basic stats for context
     const totalProfit = trades?.reduce((sum, trade) => sum + trade.profit_loss, 0) || 0;
     const winningTrades = trades?.filter(trade => trade.profit_loss > 0).length || 0;
-    const totalTrades = trades?.length || 0;
-    const winRate = totalTrades ? (winningTrades / totalTrades) * 100 : 0;
+    const losingTrades = trades?.filter(trade => trade.profit_loss < 0).length || 0;
+    const winRate = trades?.length ? (winningTrades / trades.length) * 100 : 0;
 
-    let finalPrompt = '';
-    let searchPerformed = false;
+    const systemPrompt = `You are Sydney, an AI trading assistant for Laxmi Chit Fund's trading analytics platform. You are helpful, friendly, conversational, and knowledgeable about trading and markets.
 
-    // Check if real-time search is needed
-    if (needsRealTimeSearch(message)) {
-      console.log('🌐 Real-time search triggered for:', message);
-      try {
-        const searchResults = await performWebSearch(message);
-        searchPerformed = true;
-        
-        finalPrompt = `You are Sydney, a helpful AI trading assistant with access to real-time information.
+PERSONALITY:
+- Be conversational and natural like ChatGPT
+- Use appropriate emojis to make responses engaging (but not too many)
+- Ask follow-up questions to keep conversations flowing
+- Remember context from recent messages
+- Be encouraging and supportive about trading journey
+- Handle both trading topics AND general conversation
+- Show genuine interest in the user's trading progress
+- Be knowledgeable about financial markets, economics, and trading
 
-${searchResults}
+CONVERSATION CONTEXT:
+${conversationContext || 'No previous conversation'}
 
-USER QUESTION: ${message}
+USER'S TRADING DATA SUMMARY:
+- Total Sessions: ${tradingContext.totalSessions}
+- Total Trades: ${tradingContext.totalTrades}
+- Total P/L: $${totalProfit.toFixed(2)}
+- Win Rate: ${winRate.toFixed(1)}%
+- Winning Trades: ${winningTrades}
+- Losing Trades: ${losingTrades}
 
-User Trading Stats: ${totalTrades} trades, ${winRate.toFixed(1)}% win rate, $${totalProfit.toFixed(2)} total P/L
+Recent Sessions: ${JSON.stringify(sessions?.slice(0, 3), null, 2)}
+Recent Trades: ${JSON.stringify(trades?.slice(0, 5), null, 2)}
 
-Use the search results above to provide an accurate, up-to-date response. Incorporate the real-time data naturally into your answer. Always mention when you're using current information.`;
+${hasSearchData ? `
+🌐 LIVE INTERNET SEARCH RESULTS:
+I have access to real-time information from the internet for this query. The search results are included below and are current as of right now.
 
-      } catch (searchError) {
-        console.error('🚫 Search failed, falling back to regular chat:', searchError);
-        searchPerformed = false;
-      }
-    }
+ORIGINAL USER MESSAGE: "${originalMessage || message}"
+SEARCH RESULTS: 
+${searchContext}
 
-    // If no search was performed or search failed, use regular prompt
-    if (!searchPerformed) {
-      finalPrompt = `You are Sydney, a friendly AI trading assistant for Laxmi Chit Fund's trading analytics platform.
+Please use this live data to provide an accurate, up-to-date response. Analyze the information, provide insights, and relate it to trading or the user's question as appropriate.
+` : ''}
 
-User Stats: ${totalTrades} trades, ${winRate.toFixed(1)}% win rate, $${totalProfit.toFixed(2)} total P/L
+${hasLiveData ? `
+🌐 LIVE DATA INTEGRATION:
+The user's message has been enriched with real-time market data or web search results. This information is current and accurate. Use it naturally in your response.
 
-${conversationContext ? `Recent conversation:\n${conversationContext}\n\n` : ''}
+ORIGINAL USER MESSAGE: "${originalMessage}"
+ENRICHED MESSAGE WITH LIVE DATA: "${enrichedMessage}"
 
-User Question: ${message}
+Please incorporate the live data naturally into your response. Don't just repeat it - analyze it, provide insights, and relate it to trading.
+` : ''}
 
-Respond naturally and helpfully about trading, markets, or general conversation.`;
-    }
+CAPABILITIES:
+1. Analyze trading performance with specific data insights
+2. Provide psychological feedback on trading patterns
+3. Chat about general topics (weather, jokes, life, etc.)
+4. Offer trading education and market insights
+5. Help with risk management advice
+6. Detect concerning trading behaviors
+7. Be a supportive trading companion
+8. Access live market data (crypto, stocks, forex)
+9. Search the web for latest financial news and information
+10. Provide real-time market analysis and commentary
+11. Answer questions about current events, weather, sports, and more using live internet search
 
-    console.log('🤖 Sending to Gemini, search performed:', searchPerformed);
+RESPONSE GUIDELINES:
+- Keep responses conversational and engaging
+- Use specific data from their trading history when relevant
+- Ask follow-up questions to encourage dialogue
+- Be supportive but honest about trading performance
+- Use emojis appropriately (not too many, but enough to be friendly)
+- Vary your responses - don't be repetitive
+- Remember what was discussed recently
+- Handle both serious trading analysis and light conversation
+- When provided with live search results, analyze them and provide insights
+- When provided with news/search results, summarize key points and implications
+- Always be helpful and informative
+- For real-time queries, use the search results to provide accurate, current information
+
+Current date: ${new Date().toLocaleDateString()}
+Current time: ${new Date().toLocaleTimeString()}
+
+Respond naturally to the user's message. If live search data was provided, incorporate it seamlessly into your response with analysis and insights.`;
 
     // Use Gemini API
     const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
@@ -184,7 +262,7 @@ Respond naturally and helpfully about trading, markets, or general conversation.
           {
             parts: [
               {
-                text: finalPrompt
+                text: systemPrompt
               }
             ]
           }
@@ -211,11 +289,7 @@ Respond naturally and helpfully about trading, markets, or general conversation.
       JSON.stringify({ 
         message: aiMessage,
         usage: aiData.usageMetadata,
-        debugInfo: {
-          searchPerformed,
-          query: message,
-          searchTriggered: needsRealTimeSearch(message)
-        }
+        hasLiveData: hasSearchData || hasLiveData
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
