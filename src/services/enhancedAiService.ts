@@ -13,6 +13,9 @@ export class EnhancedAIService {
     "High traffic detected! While I recover, you can still use all other features of the platform! ⚡"
   ];
 
+  // Store conversation context in memory for each user
+  private conversationContexts: Map<string, Array<{role: 'user' | 'assistant', content: string, timestamp: Date}>> = new Map();
+
   private getRandomFallback(): string {
     return this.fallbackResponses[Math.floor(Math.random() * this.fallbackResponses.length)];
   }
@@ -116,6 +119,99 @@ Use this real-time information naturally in your responses when relevant (time-b
       return 'Pre-Market Trading 🌅';
     } else {
       return 'Markets Closed 🌙';
+    }
+  }
+
+  // Add message to conversation context
+  private addToConversationContext(userId: string, role: 'user' | 'assistant', content: string): void {
+    if (!this.conversationContexts.has(userId)) {
+      this.conversationContexts.set(userId, []);
+    }
+    
+    const context = this.conversationContexts.get(userId)!;
+    context.push({
+      role,
+      content,
+      timestamp: new Date()
+    });
+    
+    // Keep only the last 20 messages to manage memory and token usage
+    if (context.length > 20) {
+      context.splice(0, context.length - 20);
+    }
+  }
+
+  // Get conversation context for a user
+  private getConversationContext(userId: string): string {
+    const context = this.conversationContexts.get(userId) || [];
+    
+    if (context.length === 0) {
+      return "This is the start of our conversation.";
+    }
+    
+    // Format the conversation history
+    const formattedContext = context.map(msg => {
+      const timeAgo = this.getTimeAgo(msg.timestamp);
+      return `${msg.role === 'user' ? 'User' : 'Sydney'} (${timeAgo}): ${msg.content}`;
+    }).join('\n\n');
+    
+    return `CONVERSATION HISTORY (Last ${context.length} messages):
+${formattedContext}
+
+Remember this context and refer to it naturally in your responses. Build upon previous topics, remember what the user has told you, and maintain conversation continuity.`;
+  }
+
+  // Helper function to get time ago string
+  private getTimeAgo(timestamp: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - timestamp.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  }
+
+  // Clear conversation context for a user (useful for new sessions)
+  public clearConversationContext(userId: string): void {
+    this.conversationContexts.delete(userId);
+  }
+
+  // Load conversation context from database on initialization
+  private async loadConversationContextFromDB(userId: string): Promise<void> {
+    try {
+      const { data: messages, error } = await supabase
+        .from('chat_messages')
+        .select('message, message_type, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(20); // Load last 20 messages
+
+      if (error) {
+        console.warn('Could not load conversation history from database:', error);
+        return;
+      }
+
+      if (messages && messages.length > 0) {
+        const context: Array<{role: 'user' | 'assistant', content: string, timestamp: Date}> = [];
+        
+        messages.forEach(msg => {
+          context.push({
+            role: msg.message_type === 'user' ? 'user' : 'assistant',
+            content: msg.message,
+            timestamp: new Date(msg.created_at)
+          });
+        });
+        
+        this.conversationContexts.set(userId, context);
+      }
+    } catch (error) {
+      console.warn('Error loading conversation context from database:', error);
     }
   }
 
@@ -399,6 +495,14 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
 
   async processMessage(message: string, userId: string): Promise<string> {
     try {
+      // Load conversation context from database if not already loaded
+      if (!this.conversationContexts.has(userId)) {
+        await this.loadConversationContextFromDB(userId);
+      }
+
+      // Add user message to conversation context
+      this.addToConversationContext(userId, 'user', message);
+
       // Get user's trading context with simplified query
       const { data: sessions } = await supabase
         .from('trading_sessions')
@@ -423,10 +527,15 @@ MANDATORY: Extract T/P and S/L from columns 6 and 7. Do NOT return null for thes
       // Get real-time date/time information
       const dateTimeInfo = this.getCurrentDateTimeInfo();
 
-      // Enhanced system prompt for natural conversations with real-time awareness
+      // Get conversation context
+      const conversationContext = this.getConversationContext(userId);
+
+      // Enhanced system prompt for natural conversations with real-time awareness and context
       const systemPrompt = `You are Sydney, a friendly and conversational AI assistant specializing in trading analytics. You're designed to be personable, engaging, and capable of both trading discussions AND general conversations.
 
 ${dateTimeInfo}
+
+${conversationContext}
 
 PERSONALITY TRAITS:
 - Warm, friendly, and approachable like a knowledgeable friend
@@ -439,6 +548,8 @@ PERSONALITY TRAITS:
 - Share insights, opinions, and even personal preferences when appropriate
 - Be conversational like ChatGPT - natural, flowing, and engaging
 - Use real-time date/time information naturally in responses
+- ALWAYS reference previous conversation context when relevant
+- Remember what the user has told you and build upon it
 
 CONVERSATION CAPABILITIES:
 ✅ Trading analysis and advice
@@ -451,6 +562,7 @@ CONVERSATION CAPABILITIES:
 ✅ Problem-solving and brainstorming
 ✅ Emotional support and motivation
 ✅ Time-aware responses (greetings based on actual time, market hours, etc.)
+✅ Context-aware responses (remember what we've discussed before)
 
 USER'S TRADING CONTEXT (use when relevant):
 - Total Trades: ${totalTrades}
@@ -472,18 +584,35 @@ RESPONSE GUIDELINES:
 - Use the current date/time information naturally when relevant
 - Give time-appropriate greetings and responses
 - Reference market hours, weekends, seasons naturally when relevant
+- MOST IMPORTANTLY: Reference and build upon our conversation history
+- Remember what the user has shared with you and show that you remember
+- If this is a continuation of a previous topic, acknowledge it
+- If the user asks about something we discussed before, reference that conversation
 
-User Message: "${message}"
+CONTEXT AWARENESS:
+- Always check the conversation history before responding
+- Reference previous topics, questions, or information the user shared
+- Show continuity in our conversation
+- If the user mentions something we discussed before, acknowledge it
+- Build relationships by remembering personal details they've shared
+- Don't repeat information you've already provided unless asked
 
-Respond naturally and engagingly to whatever the user wants to discuss. Use the real-time date/time information when appropriate. If it's trading-related, incorporate their data. If it's general conversation, be a great conversational partner!`;
+Current User Message: "${message}"
+
+Respond naturally and engagingly, using the conversation context to provide a contextual, personable response. Remember our conversation history and build upon it!`;
 
       const result = await this.retryWithBackoff(async () => {
         return await this.model.generateContent(systemPrompt);
       });
 
       const response = await result.response;
-      console.log("Response of AI:", response.text());
-      return response.text();
+      const aiResponse = response.text();
+      
+      // Add AI response to conversation context
+      this.addToConversationContext(userId, 'assistant', aiResponse);
+      
+      console.log("Response of AI:", aiResponse);
+      return aiResponse;
     } catch (error: any) {
       console.error('AI message processing error:', error);
       

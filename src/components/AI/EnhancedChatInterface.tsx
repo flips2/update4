@@ -9,7 +9,8 @@ import {
   Minimize2,
   Maximize2,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { enhancedAiService } from '../../services/enhancedAiService';
 import { useAuth } from '../../hooks/useAuth';
@@ -114,7 +115,7 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
       const history = await enhancedAiService.getChatHistory(user.id, 20);
       // Convert to display format
       const displayMessages = history.map(msg => ({
-        id: msg.id,
+        id: msg.id.toString(),
         role: msg.message_type as 'user' | 'ai',
         content: msg.message,
         timestamp: new Date(msg.created_at),
@@ -215,6 +216,27 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
   const clearChat = () => {
     setMessages([]);
     setStreamingMessageId(null);
+    // Clear conversation context in the AI service
+    if (user) {
+      enhancedAiService.clearConversationContext(user.id);
+    }
+    toast.success('Chat cleared and conversation context reset');
+  };
+
+  const refreshChat = async () => {
+    if (!user) return;
+    
+    setLoadingHistory(true);
+    try {
+      // Clear current context and reload from database
+      enhancedAiService.clearConversationContext(user.id);
+      await loadChatHistory();
+      toast.success('Chat refreshed with latest conversation history');
+    } catch (error) {
+      toast.error('Failed to refresh chat');
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
   const getStatusColor = () => {
@@ -280,6 +302,14 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
         </div>
         <div className="flex items-center space-x-2">
           <button
+            onClick={refreshChat}
+            disabled={loadingHistory}
+            className="p-1 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+            title="Refresh conversation context"
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingHistory ? 'animate-spin' : ''}`} />
+          </button>
+          <button
             onClick={() => setIsMinimized(!isMinimized)}
             className="p-1 text-slate-400 hover:text-white transition-colors"
           >
@@ -326,7 +356,7 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
               {loadingHistory && (
                 <div className="text-center text-slate-400 py-4">
                   <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
-                  <p className="text-xs">Loading chat history...</p>
+                  <p className="text-xs">Loading conversation history...</p>
                 </div>
               )}
 
@@ -334,14 +364,14 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
                 <div className="text-center text-slate-400 py-8">
                   <SydneyAvatar className="w-12 h-12 mx-auto mb-3" />
                   <p className="text-sm">Hi! I'm Sydney, your AI trading assistant.</p>
-                  <p className="text-xs mt-1">Ask me anything about your trades!</p>
+                  <p className="text-xs mt-1">I remember our conversations and can chat about anything!</p>
                   <div className="mt-4 space-y-2 text-xs">
                     <p className="text-slate-500">Try asking:</p>
                     <div className="space-y-1">
                       <p>"How's my trading performance?"</p>
                       <p>"Tell me a trading joke"</p>
                       <p>"What's Bitcoin doing today?"</p>
-                      <p>"Help me with risk management"</p>
+                      <p>"How was your day?"</p>
                     </div>
                   </div>
                 </div>
@@ -441,10 +471,10 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
                     className="text-xs text-slate-400 hover:text-slate-300 transition-colors flex items-center"
                   >
                     <Trash2 className="w-3 h-3 mr-1" />
-                    Clear chat
+                    Clear & Reset Context
                   </button>
                   <span className="text-xs text-slate-500">
-                    {messages.length} messages
+                    {messages.length} messages • Context preserved
                   </span>
                 </div>
               )}
