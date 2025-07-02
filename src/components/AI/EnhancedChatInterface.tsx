@@ -73,6 +73,53 @@ const TypewriterText: React.FC<{
   );
 };
 
+// Markdown renderer component
+const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
+  const renderMarkdown = (text: string) => {
+    // Convert **text** to <strong>text</strong>
+    let rendered = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Convert *text* to <em>text</em>
+    rendered = rendered.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Convert ### text to <h3>text</h3>
+    rendered = rendered.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+    
+    // Convert ## text to <h2>text</h2>
+    rendered = rendered.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+    
+    // Convert # text to <h1>text</h1>
+    rendered = rendered.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    
+    // Convert bullet points
+    rendered = rendered.replace(/^• (.*$)/gm, '<li>$1</li>');
+    rendered = rendered.replace(/^- (.*$)/gm, '<li>$1</li>');
+    
+    // Wrap consecutive <li> elements in <ul>
+    rendered = rendered.replace(/(<li>.*<\/li>)/gs, (match) => {
+      return `<ul>${match}</ul>`;
+    });
+    
+    // Convert line breaks to <br> but preserve paragraph structure
+    rendered = rendered.replace(/\n\n/g, '</p><p>');
+    rendered = rendered.replace(/\n/g, '<br>');
+    
+    // Wrap in paragraph tags if not already wrapped
+    if (!rendered.startsWith('<')) {
+      rendered = `<p>${rendered}</p>`;
+    }
+    
+    return rendered;
+  };
+
+  return (
+    <div 
+      className="markdown-content text-sm whitespace-pre-wrap"
+      dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
+    />
+  );
+};
+
 interface EnhancedChatInterfaceProps {
   currentSessionId?: string;
 }
@@ -410,6 +457,8 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
                           onComplete={() => handleTypewriterComplete(message.id)}
                           className="text-sm whitespace-pre-wrap"
                         />
+                      ) : message.role === 'ai' ? (
+                        <MarkdownRenderer content={message.content} />
                       ) : (
                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       )}

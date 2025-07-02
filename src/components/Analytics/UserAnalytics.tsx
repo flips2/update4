@@ -89,20 +89,37 @@ const UserAnalyticsPage: React.FC = () => {
     const totalLosses = Math.abs(losingTrades.reduce((sum, trade) => sum + trade.profit_loss, 0));
     const profitFactor = totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? 999 : 0;
 
-    // Calculate R-Multiple for trades with SL data
+    // Calculate R-Multiple for trades with SL data - CORRECTED CALCULATION
     const rMultiples: number[] = [];
     trades.forEach(trade => {
       if (trade.sl && trade.open_price && trade.profit_loss !== undefined) {
-        let risk: number;
+        // Calculate the risk amount (distance from entry to stop loss)
+        let riskAmount: number;
         if (trade.entry_side === 'Long') {
-          risk = trade.open_price - trade.sl;
+          riskAmount = Math.abs(trade.open_price - trade.sl);
         } else {
-          risk = trade.sl - trade.open_price;
+          riskAmount = Math.abs(trade.sl - trade.open_price);
         }
         
-        if (risk > 0) {
-          const rMultiple = trade.profit_loss / risk;
-          rMultiples.push(rMultiple);
+        // Calculate R-Multiple: Actual P/L divided by Risk Amount
+        // For proper R-Multiple, we need to consider the position size
+        if (riskAmount > 0 && trade.volume_lot) {
+          // Risk in dollar terms = risk amount * volume * contract size
+          const contractSize = trade.contract_size || 100000; // Default forex contract size
+          const dollarRisk = riskAmount * trade.volume_lot * contractSize;
+          
+          if (dollarRisk > 0) {
+            const rMultiple = trade.profit_loss / dollarRisk;
+            rMultiples.push(rMultiple);
+          }
+        } else if (riskAmount > 0) {
+          // Simplified calculation if volume data is not available
+          // Use margin as a proxy for position size
+          const estimatedRisk = (riskAmount / trade.open_price) * trade.margin;
+          if (estimatedRisk > 0) {
+            const rMultiple = trade.profit_loss / estimatedRisk;
+            rMultiples.push(rMultiple);
+          }
         }
       }
     });
