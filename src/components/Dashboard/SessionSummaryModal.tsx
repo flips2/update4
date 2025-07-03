@@ -15,6 +15,53 @@ const SydneyAvatar = ({ className = "w-5 h-5" }: { className?: string }) => (
   </div>
 );
 
+// Enhanced Markdown renderer component for Sydney's analysis
+const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
+  const renderMarkdown = (text: string) => {
+    // Convert **text** to <strong>text</strong>
+    let rendered = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
+    
+    // Convert *text* to <em>text</em> (but not if it's part of **)
+    rendered = rendered.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em class="italic text-slate-200">$1</em>');
+    
+    // Convert ### text to <h3>text</h3>
+    rendered = rendered.replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-blue-400 mt-4 mb-2">$1</h3>');
+    
+    // Convert ## text to <h2>text</h2>
+    rendered = rendered.replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-blue-300 mt-4 mb-2">$1</h2>');
+    
+    // Convert # text to <h1>text</h1>
+    rendered = rendered.replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-blue-200 mt-4 mb-3">$1</h1>');
+    
+    // Convert numbered lists (1. text, **1. text**, etc.)
+    rendered = rendered.replace(/^\*?\*?(\d+)\.\s*\*?\*?(.*$)/gm, '<li class="ml-4 mb-2"><span class="font-semibold text-blue-400">$1.</span> <span class="text-slate-200">$2</span></li>');
+    
+    // Convert bullet points
+    rendered = rendered.replace(/^[•-]\s+(.*$)/gm, '<li class="ml-4 mb-1 text-slate-200">• $1</li>');
+    
+    // Wrap consecutive <li> elements in <ul>
+    rendered = rendered.replace(/(<li>.*?<\/li>(?:\s*<li>.*?<\/li>)*)/gs, '<ul class="my-3 space-y-1">$1</ul>');
+    
+    // Convert line breaks to <br> but preserve paragraph structure
+    rendered = rendered.replace(/\n\n/g, '</p><p class="mb-3 text-slate-200 leading-relaxed">');
+    rendered = rendered.replace(/\n/g, '<br>');
+    
+    // Wrap in paragraph tags if not already wrapped
+    if (!rendered.startsWith('<')) {
+      rendered = `<p class="mb-3 text-slate-200 leading-relaxed">${rendered}</p>`;
+    }
+    
+    return rendered;
+  };
+
+  return (
+    <div 
+      className="markdown-content text-sm leading-relaxed"
+      dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
+    />
+  );
+};
+
 interface SessionSummaryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -100,7 +147,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
             </div>
 
             {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
+            <div className="p-6 overflow-y-auto max-h-[60vh] scrollbar-glow">
               {!hasGenerated ? (
                 <div className="text-center py-12">
                   <SydneyAvatar className="w-16 h-16 mx-auto mb-6" />
@@ -141,9 +188,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                       <span className="text-purple-400 font-medium text-sm">Sydney's Analysis</span>
                     </div>
                     <div className="prose prose-invert max-w-none">
-                      <div className="text-slate-100 whitespace-pre-wrap leading-relaxed">
-                        {summary}
-                      </div>
+                      <MarkdownRenderer content={summary} />
                     </div>
                   </div>
                   
