@@ -73,40 +73,40 @@ const TypewriterText: React.FC<{
   );
 };
 
-// Markdown renderer component
+// Enhanced Markdown renderer component
 const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
   const renderMarkdown = (text: string) => {
     // Convert **text** to <strong>text</strong>
     let rendered = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     
     // Convert *text* to <em>text</em>
-    rendered = rendered.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    rendered = rendered.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
     
     // Convert ### text to <h3>text</h3>
-    rendered = rendered.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+    rendered = rendered.replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold text-white mt-3 mb-2">$1</h3>');
     
     // Convert ## text to <h2>text</h2>
-    rendered = rendered.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+    rendered = rendered.replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold text-white mt-4 mb-2">$1</h2>');
     
     // Convert # text to <h1>text</h1>
-    rendered = rendered.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+    rendered = rendered.replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold text-white mt-4 mb-3">$1</h1>');
+    
+    // Convert numbered lists (1. text)
+    rendered = rendered.replace(/^(\d+)\.\s+(.*$)/gm, '<li class="ml-4 mb-1"><span class="font-semibold text-blue-400">$1.</span> $2</li>');
     
     // Convert bullet points
-    rendered = rendered.replace(/^• (.*$)/gm, '<li>$1</li>');
-    rendered = rendered.replace(/^- (.*$)/gm, '<li>$1</li>');
+    rendered = rendered.replace(/^[•-]\s+(.*$)/gm, '<li class="ml-4 mb-1">• $1</li>');
     
     // Wrap consecutive <li> elements in <ul>
-    rendered = rendered.replace(/(<li>.*<\/li>)/gs, (match) => {
-      return `<ul>${match}</ul>`;
-    });
+    rendered = rendered.replace(/(<li>.*?<\/li>(?:\s*<li>.*?<\/li>)*)/gs, '<ul class="my-2">$1</ul>');
     
     // Convert line breaks to <br> but preserve paragraph structure
-    rendered = rendered.replace(/\n\n/g, '</p><p>');
+    rendered = rendered.replace(/\n\n/g, '</p><p class="mb-2">');
     rendered = rendered.replace(/\n/g, '<br>');
     
     // Wrap in paragraph tags if not already wrapped
     if (!rendered.startsWith('<')) {
-      rendered = `<p>${rendered}</p>`;
+      rendered = `<p class="mb-2">${rendered}</p>`;
     }
     
     return rendered;
@@ -114,7 +114,7 @@ const MarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
 
   return (
     <div 
-      className="markdown-content text-sm whitespace-pre-wrap"
+      className="markdown-content text-sm whitespace-pre-wrap leading-relaxed"
       dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
     />
   );
@@ -225,7 +225,7 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
     } catch (error: any) {
       console.error('Chat error:', error);
       
-      let errorMessage = 'Sorry, I\'m having trouble right now. Please try again in a moment! 🤖';
+      let errorMessage = 'I\'m having trouble right now. Please try again in a moment! 🤖';
       
       if (error.message?.includes('quota') || error.message?.includes('429')) {
         errorMessage = 'I\'m experiencing high demand right now. Please try again in a few minutes! ⏰';
@@ -399,7 +399,7 @@ const EnhancedChatInterface: React.FC<EnhancedChatInterfaceProps> = ({ currentSe
             )}
 
             {/* Messages with Enhanced Scrollbar */}
-            <div className="flex-1 p-4 overflow-y-auto max-h-96 space-y-4 sydney-chat-scrollbar">
+            <div className="flex-1 p-4 overflow-y-auto max-h-96 space-y-4 scrollbar-glow">
               {loadingHistory && (
                 <div className="text-center text-slate-400 py-4">
                   <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />

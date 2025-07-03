@@ -375,7 +375,7 @@ const TradingDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 scrollbar-glow">
       {/* Header */}
       <header className="bg-slate-800/50 backdrop-blur-sm border-b border-slate-700 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4">
@@ -532,7 +532,7 @@ const TradingDashboard: React.FC = () => {
                 <div 
                   className={`space-y-3 ${
                     shouldShowScrollbar 
-                      ? 'max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800' 
+                      ? 'max-h-80 overflow-y-auto pr-2 scrollbar-glow' 
                       : ''
                   }`}
                 >

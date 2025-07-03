@@ -35,7 +35,12 @@
   background: linear-gradient(to bottom, #94a3b8, #64748b);
 }
 
-/* Custom scrollbar with glow effect */
+/* Custom scrollbar with glow effect - MAIN SCROLLBAR */
+.scrollbar-glow {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(59, 130, 246, 0.6) rgba(30, 41, 59, 0.3);
+}
+
 .scrollbar-glow::-webkit-scrollbar {
   width: 8px;
 }
@@ -97,84 +102,6 @@
 .sydney-chat-scrollbar::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(135deg, rgba(147, 51, 234, 0.9), rgba(168, 85, 247, 0.9));
   box-shadow: 0 0 12px rgba(147, 51, 234, 0.6);
-}
-
-/* Main Site Enhanced Scrollbar - Matching the glow style */
-.main-site-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 0.4s ease;
-}
-
-/* Show scrollbar only when hovering near the right edge */
-.main-site-scrollbar:hover {
-  scrollbar-color: rgba(59, 130, 246, 0.7) rgba(15, 23, 42, 0.4);
-}
-
-.main-site-scrollbar::-webkit-scrollbar {
-  width: 8px;
-}
-
-.main-site-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 4px;
-  transition: all 0.4s ease;
-}
-
-.main-site-scrollbar:hover::-webkit-scrollbar-track {
-  background: rgba(30, 41, 59, 0.5);
-  backdrop-filter: blur(8px);
-}
-
-.main-site-scrollbar::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  transition: all 0.4s ease;
-}
-
-.main-site-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.6), rgba(147, 51, 234, 0.6));
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
-}
-
-.main-site-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(147, 51, 234, 0.8));
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
-  transform: scaleY(1.1);
-}
-
-/* Scrollbar corner styling */
-.main-site-scrollbar::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-.main-site-scrollbar:hover::-webkit-scrollbar-corner {
-  background: rgba(15, 23, 42, 0.4);
-}
-
-/* Right edge hover detection zone */
-.main-site-scrollbar {
-  position: relative;
-}
-
-.main-site-scrollbar::after {
-  content: '';
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 20px;
-  height: 100vh;
-  z-index: 9999;
-  pointer-events: none;
-  background: transparent;
-  transition: background 0.3s ease;
-}
-
-.main-site-scrollbar:hover::after {
-  background: linear-gradient(to left, rgba(59, 130, 246, 0.1), transparent);
 }
 
 /* Remove number input spinners/arrows */
@@ -309,7 +236,7 @@ input[type="number"] {
   color: white;
 }
 
-/* Markdown formatting styles for Sydney's responses */
+/* Enhanced Markdown formatting styles for Sydney's responses */
 .markdown-content {
   line-height: 1.6;
 }
@@ -328,14 +255,17 @@ input[type="number"] {
 
 .markdown-content h1 {
   font-size: 1.25rem;
+  color: #3b82f6;
 }
 
 .markdown-content h2 {
   font-size: 1.125rem;
+  color: #60a5fa;
 }
 
 .markdown-content h3 {
   font-size: 1rem;
+  color: #93c5fd;
 }
 
 .markdown-content strong,
@@ -347,6 +277,7 @@ input[type="number"] {
 .markdown-content em,
 .markdown-content i {
   font-style: italic;
+  color: #e2e8f0;
 }
 
 .markdown-content ul,
@@ -357,10 +288,12 @@ input[type="number"] {
 
 .markdown-content li {
   margin: 0.25rem 0;
+  color: #e2e8f0;
 }
 
 .markdown-content p {
   margin: 0.5rem 0;
+  color: #e2e8f0;
 }
 
 .markdown-content code {
@@ -369,6 +302,7 @@ input[type="number"] {
   border-radius: 0.25rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
   font-size: 0.875em;
+  color: #fbbf24;
 }
 
 .markdown-content blockquote {
@@ -377,4 +311,10 @@ input[type="number"] {
   margin: 1rem 0;
   font-style: italic;
   color: #cbd5e1;
+}
+
+/* Numbered list styling */
+.markdown-content li span {
+  color: #3b82f6;
+  font-weight: 600;
 }

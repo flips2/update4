@@ -114,8 +114,9 @@ const UserAnalyticsPage: React.FC = () => {
           }
         } else if (riskAmount > 0) {
           // Simplified calculation if volume data is not available
-          // Use margin as a proxy for position size
-          const estimatedRisk = (riskAmount / trade.open_price) * trade.margin;
+          // Use percentage risk of margin
+          const percentageRisk = riskAmount / trade.open_price;
+          const estimatedRisk = percentageRisk * trade.margin;
           if (estimatedRisk > 0) {
             const rMultiple = trade.profit_loss / estimatedRisk;
             rMultiples.push(rMultiple);
@@ -255,7 +256,7 @@ const UserAnalyticsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 scrollbar-glow">
       {/* Header */}
       <header className="bg-slate-800/50 backdrop-blur-sm border-b border-slate-700">
         <div className="max-w-7xl mx-auto px-6 py-4">

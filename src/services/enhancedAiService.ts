@@ -5,7 +5,7 @@ import { ExtractedTradeData, ChatMessage } from '../types';
 const genAI = new GoogleGenerativeAI('AIzaSyDQVkAyAqPuonnplLxqEhhGyW_FqjteaVw');
 
 export class EnhancedAIService {
-  private model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Updated to Gemini 2.5 Flash
+  private model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" }); // Updated to Gemini 2.0 Flash
   private fallbackResponses = [
     "I'm experiencing high demand right now. Let me help you with your trading analysis in a moment! 📊",
     "My systems are busy processing other requests. Meanwhile, feel free to add your trades manually! 💪",
@@ -596,6 +596,7 @@ PERSONALITY TRAITS:
 - Use real-time date/time information naturally in responses
 - ALWAYS reference previous conversation context when relevant
 - Remember what the user has told you and build upon it
+- Keep responses concise and to the point - avoid being overly verbose
 
 CONVERSATION CAPABILITIES:
 ✅ Trading analysis and advice
@@ -634,6 +635,7 @@ RESPONSE GUIDELINES:
 - Remember what the user has shared with you and show that you remember
 - If this is a continuation of a previous topic, acknowledge it
 - If the user asks about something we discussed before, reference that conversation
+- KEEP RESPONSES CONCISE - aim for 2-3 sentences unless more detail is specifically requested
 
 CONTEXT AWARENESS:
 - Always check the conversation history before responding
@@ -645,7 +647,7 @@ CONTEXT AWARENESS:
 
 Current User Message: "${message}"
 
-Respond naturally and engagingly, using the conversation context to provide a contextual, personable response. Remember our conversation history and build upon it!`;
+Respond naturally and engagingly, using the conversation context to provide a contextual, personable response. Remember our conversation history and build upon it! Keep it concise and to the point.`;
 
       const result = await this.retryWithBackoff(async () => {
         return await this.model.generateContent(systemPrompt);
